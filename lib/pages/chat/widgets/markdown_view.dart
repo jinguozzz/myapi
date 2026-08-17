@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_highlight/flutter_highlight.dart';
 import 'package:flutter_highlight/themes/monokai-sublime.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:markdown/markdown.dart' as md;
 
 import '../../../core/theme/sci_colors.dart';
 
-/// 轻量 Markdown 渲染。
-/// 支持：代码块（语法高亮）/ 标题 / 列表 / 加粗 / 流式光标。
+/// 完整 Markdown 渲染（基于 flutter_markdown_plus），
+/// 代码块使用 flutter_highlight 语法高亮，支持表格等完整语法。
 class MarkdownView extends StatelessWidget {
   const MarkdownView({
     super.key,
@@ -18,12 +20,15 @@ class MarkdownView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (data.isEmpty) return const SizedBox.shrink();
-    final blocks = _parseBlocks(data);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ...blocks,
+        MarkdownBody(
+          data: data,
+          selectable: true,
+          builders: {'code': _SciCodeBuilder()},
+          styleSheet: _sciStyleSheet(context),
+        ),
         if (streaming) ...[
           const SizedBox(height: 2),
           const _StreamCursor(),
@@ -32,170 +37,61 @@ class MarkdownView extends StatelessWidget {
     );
   }
 
-  List<Widget> _parseBlocks(String text) {
-    final widgets = <Widget>[];
-    final parts = text.split('```');
-    for (var i = 0; i < parts.length; i++) {
-      final part = parts[i];
-      if (part.isEmpty) continue;
-      if (i.isOdd) {
-        widgets.add(_CodeBlock(code: part));
-      } else {
-        widgets.addAll(_parseTextLines(part));
-      }
-    }
-    return widgets;
-  }
-
-  List<Widget> _parseTextLines(String text) {
-    final widgets = <Widget>[];
-    final lines = text.split('\n');
-    final para = <String>[];
-
-    void flush() {
-      if (para.isEmpty) return;
-      widgets.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: _RichParagraph(text: para.join('\n')),
-        ),
-      );
-      para.clear();
-    }
-
-    for (final raw in lines) {
-      final line = raw.trimRight();
-      if (line.isEmpty) {
-        flush();
-        continue;
-      }
-      if (line.startsWith('### ')) {
-        flush();
-        widgets.add(_Heading(text: line.substring(4), level: 3));
-      } else if (line.startsWith('## ')) {
-        flush();
-        widgets.add(_Heading(text: line.substring(3), level: 2));
-      } else if (line.startsWith('# ')) {
-        flush();
-        widgets.add(_Heading(text: line.substring(2), level: 1));
-      } else if (line.startsWith('- ')) {
-        flush();
-        widgets.add(_Bullet(text: line.substring(2)));
-      } else {
-        para.add(line);
-      }
-    }
-    flush();
-    return widgets;
-  }
-}
-
-class _Heading extends StatelessWidget {
-  const _Heading({required this.text, required this.level});
-
-  final String text;
-  final int level;
-
-  @override
-  Widget build(BuildContext context) {
-    final size = level == 1
-        ? 18.0
-        : level == 2
-            ? 16.0
-            : 14.0;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6, top: 2),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: SciColors.primary,
-          fontSize: size,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-}
-
-class _Bullet extends StatelessWidget {
-  const _Bullet({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 7),
-            child: Container(
-              width: 5,
-              height: 5,
-              decoration: BoxDecoration(
-                color: SciColors.primary,
-                shape: BoxShape.circle,
-                boxShadow: SciColors.neonShadow(blur: 5),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(child: _RichParagraph(text: text)),
-        ],
-      ),
-    );
-  }
-}
-
-class _RichParagraph extends StatelessWidget {
-  const _RichParagraph({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text.rich(
-      TextSpan(children: _parseInline(text)),
-      style: TextStyle(
+  MarkdownStyleSheet _sciStyleSheet(BuildContext context) {
+    final base = MarkdownStyleSheet.fromTheme(Theme.of(context));
+    return base.copyWith(
+      p: TextStyle(
         color: SciColors.textPrimaryOf(context),
         fontSize: 15,
         height: 1.5,
       ),
+      strong: TextStyle(
+        color: SciColors.textPrimaryOf(context),
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+      ),
+      em: const TextStyle(fontStyle: FontStyle.italic),
+      h1: _headingStyle(18),
+      h2: _headingStyle(16),
+      h3: _headingStyle(14),
+      h4: _headingStyle(13),
+      listBullet: TextStyle(color: SciColors.primary, fontSize: 15),
+      blockquote: TextStyle(
+        color: SciColors.textSecondaryOf(context),
+        fontSize: 14,
+        height: 1.5,
+      ),
+      blockquoteDecoration: BoxDecoration(
+        color: SciColors.primary.withValues(alpha: 0.06),
+        border: Border(
+          left: BorderSide(color: SciColors.primary, width: 3),
+        ),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      // 内联代码
+      code: const TextStyle(
+        color: Color(0xFF9BE9FF),
+        fontSize: 13,
+        fontFamily: 'monospace',
+        backgroundColor: Color(0xFF070D18),
+      ),
+      // 块级代码由 _SciCodeBuilder 接管，这里去装饰避免双重边框
+      codeblockPadding: EdgeInsets.zero,
+      codeblockDecoration: const BoxDecoration(color: Colors.transparent),
     );
   }
 
-  List<InlineSpan> _parseInline(String text) {
-    final spans = <InlineSpan>[];
-    final pattern = RegExp(r'\*\*(.+?)\*\*');
-    var last = 0;
-    for (final m in pattern.allMatches(text)) {
-      if (m.start > last) {
-        spans.add(TextSpan(text: text.substring(last, m.start)));
-      }
-      spans.add(TextSpan(
-        text: m.group(1),
-        style: const TextStyle(
-          fontWeight: FontWeight.w700,
-          color: SciColors.primary,
-        ),
-      ));
-      last = m.end;
-    }
-    if (last < text.length) {
-      spans.add(TextSpan(text: text.substring(last)));
-    }
-    return spans;
-  }
+  TextStyle _headingStyle(double size) => TextStyle(
+        color: SciColors.primary,
+        fontSize: size,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.5,
+      );
 }
 
-/// 代码块（基于 flutter_highlight 语法高亮）
-class _CodeBlock extends StatelessWidget {
-  const _CodeBlock({required this.code});
-
-  final String code;
+/// 代码块构建器：块级代码渲染为带标题栏与语法高亮的代码面板
+class _SciCodeBuilder extends MarkdownElementBuilder {
+  _SciCodeBuilder();
 
   static const _languageMap = <String, String>{
     'dart': 'dart',
@@ -224,7 +120,6 @@ class _CodeBlock extends StatelessWidget {
     'plaintext': 'plaintext',
   };
 
-  /// 基于 monokai-sublime，但背景保持代码面板色
   static final Map<String, TextStyle> _theme = () {
     final t = Map<String, TextStyle>.from(monokaiSublimeTheme);
     final root = t['root'];
@@ -235,13 +130,57 @@ class _CodeBlock extends StatelessWidget {
   }();
 
   @override
-  Widget build(BuildContext context) {
-    final lines = code.split('\n');
-    final rawLang = lines.isNotEmpty ? lines.first.trim().toLowerCase() : '';
-    final langName = _languageMap.containsKey(rawLang) ? rawLang : '';
-    final codeText = langName.isNotEmpty ? lines.sublist(1).join('\n') : code;
-    final highlightLang = _languageMap[langName] ?? 'plaintext';
+  bool isBlockElement() => true;
 
+  @override
+  Widget? visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    final isBlock =
+        element.attributes.containsKey('class') ||
+            element.textContent.contains('\n');
+    final code = element.textContent;
+    if (isBlock) {
+      final rawLang = _extractLang(element.attributes['class'] ?? '');
+      final langName = _languageMap[rawLang] ?? 'plaintext';
+      return _CodeBlock(code: code, langName: rawLang, highlightLang: langName);
+    }
+    // 行内代码
+    return Text(
+      code,
+      style: const TextStyle(
+        color: Color(0xFF9BE9FF),
+        fontSize: 13,
+        fontFamily: 'monospace',
+        backgroundColor: Color(0xFF070D18),
+      ),
+    );
+  }
+
+  String _extractLang(String classAttr) {
+    final idx = classAttr.indexOf('language-');
+    if (idx < 0) return '';
+    return classAttr.substring(idx + 9).trim();
+  }
+}
+
+/// 代码块面板（标题栏 + 语法高亮）
+class _CodeBlock extends StatelessWidget {
+  const _CodeBlock({
+    required this.code,
+    required this.langName,
+    required this.highlightLang,
+  });
+
+  final String code;
+  final String langName;
+  final String highlightLang;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -262,7 +201,7 @@ class _CodeBlock extends StatelessWidget {
                 const SizedBox(width: 6),
                 const _Dot(color: SciColors.accent),
                 const SizedBox(width: 6),
-                const _Dot(color: SciColors.primary),
+                _Dot(color: SciColors.primary),
                 const Spacer(),
                 Text(
                   langName.isEmpty ? 'code' : langName,
@@ -277,12 +216,16 @@ class _CodeBlock extends StatelessWidget {
             ),
           ),
           const Divider(height: 1, color: SciColors.border),
-          HighlightView(
-            codeText,
-            language: highlightLang,
-            theme: _theme,
-            padding: const EdgeInsets.all(12),
-            textStyle: const TextStyle(fontSize: 13, height: 1.5),
+          // 水平滚动防止超长代码行撑爆布局（避免渲染成白色大块）
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: HighlightView(
+              code,
+              language: highlightLang,
+              theme: _SciCodeBuilder._theme,
+              padding: const EdgeInsets.all(12),
+              textStyle: const TextStyle(fontSize: 13, height: 1.5),
+            ),
           ),
         ],
       ),

@@ -4,8 +4,10 @@ import 'package:uuid/uuid.dart';
 import '../../models/conversation.dart';
 import '../../models/message.dart';
 import '../../models/model_config.dart';
+import '../../services/storage/attachment_storage.dart';
 import '../../services/storage/conversation_repository.dart';
 import '../../services/storage/model_config_repository.dart';
+import '../../services/storage/secure_storage_service.dart';
 
 /// 轻量全局状态（主题、字体缩放、模型、对话）。
 /// 不引入第三方状态管理，保持轻量；后续可平滑迁移至 Riverpod。
@@ -17,6 +19,10 @@ class AppState {
 
   /// 主题模式
   final ValueNotifier<ThemeMode> themeMode = ValueNotifier(ThemeMode.dark);
+
+  /// 霓虹主题色（自定义主色）
+  final ValueNotifier<Color> accentColor =
+      ValueNotifier(const Color(0xFF00E5FF));
 
   /// 全局字体缩放倍数
   final ValueNotifier<double> fontScale = ValueNotifier(1.0);
@@ -94,6 +100,33 @@ class AppState {
     if (conv != null && conv.id == id) {
       currentConversation.value = conv.copyWith(title: title);
     }
+  }
+
+  /// 删除会话（同时清理其附件文件）
+  Future<void> deleteConversation(String id) async {
+    final conv = await conversationRepository.getConversation(id);
+    if (conv != null) {
+      await AttachmentStorage.deleteAll(
+        conv.messages.expand((m) => m.attachments.map((a) => a.path)),
+      );
+    }
+    await conversationRepository.deleteConversation(id);
+    if (currentConversation.value?.id == id) {
+      currentConversation.value = null;
+      openConversationId.value = null;
+    }
+  }
+
+  /// 一键清除全部数据（S-03）：会话、附件、模型配置与 API Key
+  Future<void> clearAllData() async {
+    await conversationRepository.clearAll();
+    await AttachmentStorage.clearAll();
+    await repository.clearAll();
+    await const SecureStorageService().deleteAllKeys();
+    currentConversation.value = null;
+    openConversationId.value = null;
+    models.value = [];
+    currentModel.value = null;
   }
 
   /// 同步当前会话消息到内存状态

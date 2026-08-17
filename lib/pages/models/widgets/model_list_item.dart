@@ -73,7 +73,7 @@ class ModelListItem extends StatelessWidget {
                             color: SciColors.primary.withValues(alpha: 0.14),
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: const Text(
+                          child: Text(
                             '默认',
                             style: TextStyle(
                               color: SciColors.primary,
@@ -145,7 +145,7 @@ class ModelListItem extends StatelessWidget {
         boxShadow: selected ? SciColors.neonShadow(blur: 8) : null,
       ),
       child: selected
-          ? const Icon(Icons.check_rounded, size: 14, color: SciColors.primary)
+          ? Icon(Icons.check_rounded, size: 14, color: SciColors.primary)
           : null,
     );
   }

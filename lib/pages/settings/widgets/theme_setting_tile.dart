@@ -61,7 +61,7 @@ class ThemeSettingTile extends StatelessWidget {
                   ),
                 ),
                 trailing: mode == current
-                    ? const Icon(
+                    ? Icon(
                         Icons.check_circle_rounded,
                         color: SciColors.primary,
                         size: 20,

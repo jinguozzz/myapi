@@ -87,7 +87,7 @@ class ModelListPage extends StatelessWidget {
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
+                        gradient: LinearGradient(
                           colors: [SciColors.primary, SciColors.secondary],
                         ),
                         borderRadius: BorderRadius.circular(10),
@@ -174,7 +174,7 @@ class _EmptyState extends StatelessWidget {
               ),
               boxShadow: SciColors.neonShadow(blur: 16),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.smart_toy_outlined,
               color: SciColors.primary,
               size: 30,
@@ -206,7 +206,7 @@ class _EmptyState extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   colors: [SciColors.primary, SciColors.secondary],
                 ),
                 borderRadius: BorderRadius.circular(10),

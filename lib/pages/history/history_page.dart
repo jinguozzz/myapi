@@ -74,7 +74,7 @@ class _HistoryPageState extends State<HistoryPage> {
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.chat_bubble_outline_rounded,
+              leading: Icon(Icons.chat_bubble_outline_rounded,
                   color: SciColors.primary, size: 20),
               title: const Text('打开对话',
                   style: TextStyle(color: SciColors.textPrimary, fontSize: 14)),
@@ -84,7 +84,7 @@ class _HistoryPageState extends State<HistoryPage> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.drive_file_rename_outline_rounded,
+              leading: Icon(Icons.drive_file_rename_outline_rounded,
                   color: SciColors.primary, size: 20),
               title: const Text('重命名',
                   style: TextStyle(color: SciColors.textPrimary, fontSize: 14)),
@@ -94,7 +94,7 @@ class _HistoryPageState extends State<HistoryPage> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.ios_share_rounded,
+              leading: Icon(Icons.ios_share_rounded,
                   color: SciColors.primary, size: 20),
               title: const Text('导出为 Markdown',
                   style: TextStyle(color: SciColors.textPrimary, fontSize: 14)),
@@ -147,7 +147,7 @@ class _HistoryPageState extends State<HistoryPage> {
               await AppState.instance.renameConversation(item.id, title);
               await _load();
             },
-            child: const Text('保存', style: TextStyle(color: SciColors.primary)),
+            child: Text('保存', style: TextStyle(color: SciColors.primary)),
           ),
         ],
       ),
@@ -174,12 +174,7 @@ class _HistoryPageState extends State<HistoryPage> {
           TextButton(
             onPressed: () async {
               Navigator.of(ctx).pop();
-              await AppState.instance.conversationRepository
-                  .deleteConversation(item.id);
-              if (AppState.instance.currentConversation.value?.id == item.id) {
-                AppState.instance.currentConversation.value = null;
-                AppState.instance.openConversationId.value = null;
-              }
+              await AppState.instance.deleteConversation(item.id);
               await _load();
             },
             child: const Text('删除', style: TextStyle(color: SciColors.danger)),
@@ -269,7 +264,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 ),
                 decoration: InputDecoration(
                   hintText: '搜索标题或内容…',
-                  prefixIcon: const Icon(
+                  prefixIcon: Icon(
                     Icons.search_rounded,
                     color: SciColors.primary,
                     size: 20,
@@ -305,15 +300,7 @@ class _HistoryPageState extends State<HistoryPage> {
                           ),
                           onDismissed: (_) {
                             _items.removeAt(i);
-                            AppState.instance.conversationRepository
-                                .deleteConversation(item.id);
-                            if (AppState.instance.currentConversation.value
-                                    ?.id ==
-                                item.id) {
-                              AppState.instance.currentConversation.value =
-                                  null;
-                              AppState.instance.openConversationId.value = null;
-                            }
+                            AppState.instance.deleteConversation(item.id);
                             _load();
                           },
                           child: HistoryListItem(
@@ -351,7 +338,7 @@ class _HistoryPageState extends State<HistoryPage> {
               ),
               boxShadow: SciColors.neonShadow(blur: 16),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.history_rounded,
               color: SciColors.primary,
               size: 30,

@@ -59,12 +59,18 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                     ),
                   ),
                   const SizedBox(width: 6),
-                  Text(
-                    model == null ? '未选择模型' : '${model.displayName} · 在线',
-                    style: TextStyle(
-                      color: SciColors.textSecondaryOf(context),
-                      fontSize: 11,
-                      letterSpacing: 0.5,
+                  Flexible(
+                    child: Text(
+                      model == null
+                          ? '未选择模型'
+                          : '${model.displayName} · ${model.modelId}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: SciColors.textSecondaryOf(context),
+                        fontSize: 11,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
                 ],
@@ -169,7 +175,7 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                 ),
                 trailing: m.id == currentId
-                    ? const Icon(
+                    ? Icon(
                         Icons.check_circle_rounded,
                         color: SciColors.primary,
                         size: 20,

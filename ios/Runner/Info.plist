@@ -26,6 +26,14 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>用于拍照上传图片到 AI 对话</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>用于从相册选择图片发送到 AI 对话</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>用于语音输入消息</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>用于将语音转换为文字发送</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

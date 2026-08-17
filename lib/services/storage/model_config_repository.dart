@@ -73,4 +73,10 @@ class ModelConfigRepository {
       jsonEncode([for (final c in configs) c.toJson()]),
     );
   }
+
+  /// 清空全部模型配置（API Key 需另行调用 SecureStorage 清除）
+  Future<void> clearAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefsKey);
+  }
 }

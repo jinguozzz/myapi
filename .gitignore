@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# 个人开发文档（不提交到仓库）
+/progress/
+/开发计划.md
+/需求文档.txt

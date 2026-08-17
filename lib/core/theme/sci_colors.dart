@@ -13,8 +13,8 @@ class SciColors {
   /// 面板浅色（输入框等）
   static const Color surfaceLight = Color(0xFF162031);
 
-  /// 霓虹青（主色）
-  static const Color primary = Color(0xFF00E5FF);
+  /// 霓虹青（主色）——运行时可变，支持自定义霓虹主题色
+  static Color primary = const Color(0xFF00E5FF);
 
   /// 主色暗化
   static const Color primaryDim = Color(0xFF00A8C4);
@@ -37,8 +37,14 @@ class SciColors {
   /// 边框
   static const Color border = Color(0xFF1E2A3D);
 
-  /// 霓虹发光（阴影）
-  static const Color glow = Color(0x4D00E5FF);
+  /// 霓虹发光（阴影）——随主色联动
+  static Color glow = const Color(0x4D00E5FF);
+
+  /// 应用自定义霓虹主题色
+  static void applyAccent(Color color) {
+    primary = color;
+    glow = color.withValues(alpha: 0.3);
+  }
 
   /// 是否当前为暗色主题
   static bool isDark(BuildContext context) =>

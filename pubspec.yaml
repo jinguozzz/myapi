@@ -44,7 +44,12 @@ dependencies:
   path: ^1.9.1
   share_plus: ^13.3.0
   path_provider: ^2.1.6
-
+  file_picker: ^12.0.0
+  image_picker: ^1.2.3
+  speech_to_text: ^7.4.0
+  flutter_markdown_plus: ^1.0.12
+  markdown: ^7.3.1
+  permission_handler: ^13.0.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

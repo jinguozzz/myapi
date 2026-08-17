@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'core/state/app_state.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/sci_colors.dart';
 import 'pages/home/home_page.dart';
 
 /// 应用根组件
@@ -12,10 +13,12 @@ class MyAIApp extends StatelessWidget {
   static final Listenable _appListenable = Listenable.merge([
     AppState.instance.themeMode,
     AppState.instance.fontScale,
+    AppState.instance.accentColor,
   ]);
 
   @override
   Widget build(BuildContext context) {
+    SciColors.applyAccent(AppState.instance.accentColor.value);
     return AnimatedBuilder(
       animation: _appListenable,
       builder: (context, _) {

@@ -41,11 +41,11 @@ class HistoryListItem extends StatelessWidget {
               Container(
                 width: 3,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [SciColors.primary, SciColors.secondary],
-                  ),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [SciColors.primary, SciColors.secondary],
+                ),
                   boxShadow: [BoxShadow(color: SciColors.glow, blurRadius: 6)],
                 ),
               ),
@@ -93,7 +93,7 @@ class HistoryListItem extends StatelessWidget {
                           ),
                           child: Text(
                             '$count 条',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: SciColors.primary,
                               fontSize: 10,
                               letterSpacing: 0.5,

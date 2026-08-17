@@ -1,15 +1,20 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/state/app_state.dart';
 import '../../core/theme/sci_colors.dart';
+import '../../models/attachment.dart';
 import '../../models/conversation.dart';
 import '../../models/message.dart';
 import '../../models/model_config.dart';
 import '../../services/network/chat_service.dart';
+import '../../services/storage/attachment_storage.dart';
 import 'widgets/chat_app_bar.dart';
 import 'widgets/message_bubble.dart';
 import 'widgets/message_input_bar.dart';
@@ -26,8 +31,10 @@ class _ChatPageState extends State<ChatPage> {
   static const int _maxMessages = 200;
 
   final ChatService _chatService = ChatService();
+  final ImagePicker _imagePicker = ImagePicker();
   final Uuid _uuid = const Uuid();
   final List<Message> _messages = [];
+  final List<Attachment> _pendingAttachments = [];
 
   bool _showWelcome = true;
   bool _isGenerating = false;
@@ -37,6 +44,12 @@ class _ChatPageState extends State<ChatPage> {
 
   bool get _showTyping =>
       _isGenerating && (_messages.isEmpty || _messages.last.role != 'assistant');
+
+  bool get _lastIsError =>
+      !_isGenerating &&
+      _messages.isNotEmpty &&
+      _messages.last.role == 'assistant' &&
+      _messages.last.content.startsWith('⚠️');
 
   ModelConfig? get _model => AppState.instance.currentModel.value;
 
@@ -107,15 +120,144 @@ class _ChatPageState extends State<ChatPage> {
       role: 'user',
       content: trimmed,
       timestamp: DateTime.now(),
+      attachments: List.of(_pendingAttachments),
     );
     setState(() {
       _messages.add(userMsg);
       _isGenerating = true;
+      _pendingAttachments.clear();
       _trimMemoryMessages();
     });
     _persistMessage(userMsg);
     _scrollToBottom();
     _startStreaming(model);
+  }
+
+  /// 附件入口：拍照 / 选图片 / 选文件
+  Future<void> _onAttach() async {
+    final action = await showModalBottomSheet<_AttachAction>(
+      context: context,
+      backgroundColor: SciColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                '添加附件',
+                style: TextStyle(
+                  color: SciColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.photo_camera_outlined,
+                  color: SciColors.primary, size: 20),
+              title: const Text('拍照上传',
+                  style: TextStyle(color: SciColors.textPrimary, fontSize: 14)),
+              subtitle: const Text('调用系统相机拍摄后上传',
+                  style: TextStyle(color: SciColors.textSecondary, fontSize: 11)),
+              onTap: () => Navigator.of(ctx).pop(_AttachAction.camera),
+            ),
+            ListTile(
+              leading: Icon(Icons.photo_library_outlined,
+                  color: SciColors.primary, size: 20),
+              title: const Text('从相册选择图片',
+                  style: TextStyle(color: SciColors.textPrimary, fontSize: 14)),
+              subtitle: const Text('图片将以视觉内容随消息发送',
+                  style: TextStyle(color: SciColors.textSecondary, fontSize: 11)),
+              onTap: () => Navigator.of(ctx).pop(_AttachAction.image),
+            ),
+            ListTile(
+              leading: Icon(Icons.folder_open_rounded,
+                  color: SciColors.primary, size: 20),
+              title: const Text('选择文件',
+                  style: TextStyle(color: SciColors.textPrimary, fontSize: 14)),
+              subtitle: const Text('文件仅本地展示，不随消息上传',
+                  style: TextStyle(color: SciColors.textSecondary, fontSize: 11)),
+              onTap: () => Navigator.of(ctx).pop(_AttachAction.file),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+    switch (action) {
+      case _AttachAction.camera:
+        await _takePhoto();
+      case _AttachAction.image:
+        await _pickFiles(FileType.image);
+      case _AttachAction.file:
+        await _pickFiles(FileType.any);
+    }
+  }
+
+  /// 拍照上传（调用系统相机）
+  Future<void> _takePhoto() async {
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 90,
+      );
+      if (picked == null || !mounted) return;
+      final ext = picked.path.contains('.')
+          ? picked.path.split('.').last
+          : 'jpg';
+      final attachment = await AttachmentStorage.copyIn(
+        sourcePath: picked.path,
+        name: 'photo.$ext',
+        ext: ext,
+      );
+      if (!mounted) return;
+      setState(() => _pendingAttachments.add(attachment));
+      _warnIfNotVision([attachment]);
+    } catch (e) {
+      if (mounted) _toast('拍照失败：$e');
+    }
+  }
+
+  Future<void> _pickFiles(FileType type) async {
+    try {
+      final files = await FilePicker.pickFiles(type: type);
+      if (files.isEmpty) return;
+      final picked = <Attachment>[];
+      for (final f in files) {
+        final path = f.path;
+        if (path == null) continue;
+        try {
+          picked.add(await AttachmentStorage.copyIn(
+            sourcePath: path,
+            name: f.name,
+          ));
+        } catch (_) {}
+      }
+      if (picked.isEmpty) return;
+      if (!mounted) return;
+      setState(() => _pendingAttachments.addAll(picked));
+      _warnIfNotVision(picked);
+    } catch (e) {
+      if (mounted) _toast('选择文件失败：$e');
+    }
+  }
+
+  /// 当前模型不支持视觉时提示图片仅本地展示
+  void _warnIfNotVision(List<Attachment> attachments) {
+    if (!attachments.any((a) => a.type == AttachmentType.image)) return;
+    if (_model?.supportsVision ?? false) return;
+    _toast('当前模型不支持图片识别，图片将仅本地展示，不会发送给模型');
+  }
+
+  void _removePendingAttachment(Attachment a) {
+    setState(() => _pendingAttachments.remove(a));
+    AttachmentStorage.delete(a.path);
   }
 
   void _startStreaming(ModelConfig model) {
@@ -276,7 +418,7 @@ class _ChatPageState extends State<ChatPage> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('新建', style: TextStyle(color: SciColors.primary)),
+            child: Text('新建', style: TextStyle(color: SciColors.primary)),
           ),
         ],
       ),
@@ -291,6 +433,9 @@ class _ChatPageState extends State<ChatPage> {
     _stopGenerating();
     final conv = _conversation;
     if (conv == null) return;
+    final paths = _messages
+        .expand((m) => m.attachments.map((a) => a.path));
+    await AttachmentStorage.deleteAll(paths);
     await AppState.instance.conversationRepository
         .deleteAllMessages(conv.id);
     if (!mounted) return;
@@ -340,19 +485,117 @@ class _ChatPageState extends State<ChatPage> {
     _toast('已复制 AI 回复');
   }
 
+  /// 长按消息操作菜单：复制 / 重新生成 / 删除
+  void _showMessageActions(Message msg) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: SciColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                '消息操作',
+                style: TextStyle(
+                  color: SciColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.content_copy_rounded,
+                  color: SciColors.primary, size: 20),
+              title: const Text('复制内容',
+                  style: TextStyle(color: SciColors.textPrimary, fontSize: 14)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                Clipboard.setData(ClipboardData(text: msg.content));
+                _toast('已复制');
+              },
+            ),
+            if (msg.role == 'assistant')
+              ListTile(
+                leading: Icon(Icons.refresh_rounded,
+                    color: SciColors.primary, size: 20),
+                title: const Text('从此处重新生成',
+                    style:
+                        TextStyle(color: SciColors.textPrimary, fontSize: 14)),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _regenerateFrom(msg);
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline_rounded,
+                  color: SciColors.danger, size: 20),
+              title: const Text('删除消息',
+                  style: TextStyle(color: SciColors.danger, fontSize: 14)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _deleteMessage(msg);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 删除单条消息（含附件文件）
+  Future<void> _deleteMessage(Message msg) async {
+    final conv = _conversation;
+    setState(() => _messages.remove(msg));
+    if (conv != null) {
+      await AppState.instance.conversationRepository
+          .deleteMessagesByIds([msg.id]);
+    }
+    await AttachmentStorage.deleteAll(msg.attachments.map((a) => a.path));
+    AppState.instance.syncCurrentMessages(_messages);
+  }
+
+  /// 从指定消息处截断并重新生成
+  void _regenerateFrom(Message msg) {
+    final i = _messages.indexOf(msg);
+    if (i < 0) return;
+    if (i + 1 < _messages.length) {
+      final removed = _messages.sublist(i + 1);
+      setState(() => _messages.removeRange(i + 1, _messages.length));
+      final conv = _conversation;
+      if (conv != null) {
+        AppState.instance.conversationRepository
+            .deleteMessagesByIds(removed.map((m) => m.id).toList());
+      }
+      AttachmentStorage.deleteAll(
+        removed.expand((m) => m.attachments.map((a) => a.path)),
+      );
+    }
+    _regenerate();
+  }
+
   void _toast(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
+      if (!_scrollController.hasClients) return;
+      try {
+        final position = _scrollController.position;
+        if (!position.hasContentDimensions) return;
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
+          position.maxScrollExtent,
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,
         );
-      }
+      } catch (_) {}
     });
   }
 
@@ -397,18 +640,135 @@ class _ChatPageState extends State<ChatPage> {
                 return MessageBubble(
                   role: msg.role,
                   content: msg.content,
+                  attachments: msg.attachments,
                   isStreaming: msg.role == 'assistant' &&
                       index == _messages.length - 1 &&
                       _isGenerating,
+                  onLongPress: () => _showMessageActions(msg),
                 );
               },
             ),
           ),
+          if (_pendingAttachments.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final a in _pendingAttachments)
+                    _PendingChip(
+                      attachment: a,
+                      onRemove: () => _removePendingAttachment(a),
+                    ),
+                ],
+              ),
+            ),
+          if (_lastIsError)
+            Align(
+              alignment: Alignment.center,
+              child: TextButton.icon(
+                onPressed: _regenerate,
+                icon: Icon(
+                  Icons.refresh_rounded,
+                  size: 16,
+                  color: SciColors.primary,
+                ),
+                label: Text(
+                  '重试',
+                  style: TextStyle(color: SciColors.primary, fontSize: 13),
+                ),
+              ),
+            ),
           MessageInputBar(
             isGenerating: _isGenerating,
             onSend: _handleSend,
             onStop: _stopGenerating,
             onCopy: _copyLastAiReply,
+            onAttach: _onAttach,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 附件操作类型
+enum _AttachAction { camera, image, file }
+
+/// 待发送附件芯片
+class _PendingChip extends StatelessWidget {
+  const _PendingChip({required this.attachment, required this.onRemove});
+
+  final Attachment attachment;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final isImage = attachment.type == AttachmentType.image;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(6, 6, 4, 6),
+      decoration: BoxDecoration(
+        color: SciColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: SciColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isImage)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.file(
+                File(attachment.path),
+                width: 34,
+                height: 34,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Container(
+                  width: 34,
+                  height: 34,
+                  color: SciColors.surfaceLight,
+                  child: const Icon(Icons.image_outlined,
+                      size: 18, color: SciColors.textSecondary),
+                ),
+              ),
+            )
+          else
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: SciColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(Icons.insert_drive_file_outlined,
+                  size: 18, color: SciColors.primary),
+            ),
+          const SizedBox(width: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 140),
+            child: Text(
+              attachment.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: SciColors.textPrimaryOf(context),
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          InkWell(
+            onTap: onRemove,
+            borderRadius: BorderRadius.circular(8),
+            child: const Padding(
+              padding: EdgeInsets.all(4),
+              child: Icon(
+                Icons.close_rounded,
+                size: 14,
+                color: SciColors.textSecondary,
+              ),
+            ),
           ),
         ],
       ),

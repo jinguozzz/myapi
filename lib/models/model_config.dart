@@ -13,6 +13,7 @@ class ModelConfig {
     this.temperature = 0.7,
     this.maxTokens = 4096,
     this.isDefault = false,
+    this.supportsVision = false,
     required this.createdAt,
   });
 
@@ -43,6 +44,10 @@ class ModelConfig {
   /// 是否默认
   final bool isDefault;
 
+  /// 是否支持图片输入（视觉模型）。
+  /// 为 false 时，图片仅本地展示，不随请求发送，避免文本模型报错。
+  final bool supportsVision;
+
   /// 创建时间
   final DateTime createdAt;
 
@@ -56,6 +61,7 @@ class ModelConfig {
     double? temperature,
     int? maxTokens,
     bool? isDefault,
+    bool? supportsVision,
     DateTime? createdAt,
   }) {
     return ModelConfig(
@@ -68,6 +74,7 @@ class ModelConfig {
       temperature: temperature ?? this.temperature,
       maxTokens: maxTokens ?? this.maxTokens,
       isDefault: isDefault ?? this.isDefault,
+      supportsVision: supportsVision ?? this.supportsVision,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -81,6 +88,7 @@ class ModelConfig {
         'temperature': temperature,
         'maxTokens': maxTokens,
         'isDefault': isDefault,
+        'supportsVision': supportsVision,
         'createdAt': createdAt.toIso8601String(),
       };
 
@@ -96,6 +104,7 @@ class ModelConfig {
         temperature: (json['temperature'] as num?)?.toDouble() ?? 0.7,
         maxTokens: (json['maxTokens'] as num?)?.toInt() ?? 4096,
         isDefault: json['isDefault'] as bool? ?? false,
+        supportsVision: json['supportsVision'] as bool? ?? false,
         createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
             DateTime.now(),
       );

@@ -26,7 +26,7 @@ class ContextTurnsTile extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.history_rounded, color: SciColors.primary, size: 20),
+                Icon(Icons.history_rounded, color: SciColors.primary, size: 20),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -100,7 +100,7 @@ class ContextTurnsTile extends StatelessWidget {
                   ),
                 ),
                 trailing: o == current
-                    ? const Icon(
+                    ? Icon(
                         Icons.check_circle_rounded,
                         color: SciColors.primary,
                         size: 20,

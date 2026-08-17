@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../../models/attachment.dart';
 import '../../models/conversation.dart';
 import '../../models/message.dart';
 
@@ -9,14 +12,19 @@ import '../../models/message.dart';
 /// conversations 与 messages 两张表，消息外键级联删除。
 class ConversationRepository {
   static const _dbName = 'myai_conversations.db';
-  static const _dbVersion = 1;
+  static const _dbVersion = 2;
 
   Database? _db;
 
   Future<Database> get _database async {
     if (_db != null) return _db!;
     final path = join(await getDatabasesPath(), _dbName);
-    _db = await openDatabase(path, version: _dbVersion, onCreate: _onCreate);
+    _db = await openDatabase(
+      path,
+      version: _dbVersion,
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
+    );
     return _db!;
   }
 
@@ -37,9 +45,16 @@ class ConversationRepository {
         role TEXT NOT NULL,
         content TEXT NOT NULL,
         timestamp INTEGER NOT NULL,
+        attachments TEXT,
         FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
       )
     ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE messages ADD COLUMN attachments TEXT');
+    }
   }
 
   /// 会话列表（按最后更新倒序），可选关键词搜索标题或消息内容
@@ -112,6 +127,7 @@ class ConversationRepository {
               content: m['content'] as String,
               timestamp:
                   DateTime.fromMillisecondsSinceEpoch(m['timestamp'] as int),
+              attachments: _parseAttachments(m['attachments'] as String?),
             ),
         ],
       );
@@ -171,6 +187,9 @@ class ConversationRepository {
         'content': message.content,
         'timestamp':
             (message.timestamp ?? DateTime.now()).millisecondsSinceEpoch,
+        'attachments': jsonEncode([
+          for (final a in message.attachments) a.toJson(),
+        ]),
       });
       await _touch(db, conversationId);
     } catch (_) {}
@@ -184,6 +203,19 @@ class ConversationRepository {
         {'content': content},
         where: 'id = ?',
         whereArgs: [messageId],
+      );
+    } catch (_) {}
+  }
+
+  /// 按 ID 批量删除消息（长按菜单删除/重新生成时清理）
+  Future<void> deleteMessagesByIds(List<String> ids) async {
+    if (ids.isEmpty) return;
+    try {
+      final db = await _database;
+      await db.delete(
+        'messages',
+        where: 'id IN (${List.filled(ids.length, '?').join(',')})',
+        whereArgs: ids,
       );
     } catch (_) {}
   }
@@ -238,6 +270,18 @@ class ConversationRepository {
       where: 'id = ?',
       whereArgs: [conversationId],
     );
+  }
+
+  List<Attachment> _parseAttachments(String? raw) {
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return [
+        for (final a in list) Attachment.fromJson(a as Map<String, dynamic>),
+      ];
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// 导出会话为 Markdown 文本；失败返回 null

@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../../core/theme/sci_colors.dart';
 
@@ -11,6 +13,7 @@ class MessageInputBar extends StatefulWidget {
     required this.onSend,
     required this.onStop,
     required this.onCopy,
+    required this.onAttach,
     required this.isGenerating,
   });
 
@@ -19,6 +22,9 @@ class MessageInputBar extends StatefulWidget {
 
   /// 一键复制（由页面层决定复制内容，通常为最近一条 AI 回复）
   final VoidCallback onCopy;
+
+  /// 打开附件选择
+  final VoidCallback onAttach;
   final bool isGenerating;
 
   @override
@@ -28,9 +34,9 @@ class MessageInputBar extends StatefulWidget {
 class _MessageInputBarState extends State<MessageInputBar>
     with SingleTickerProviderStateMixin {
   final TextEditingController _controller = TextEditingController();
+  final SpeechToText _speech = SpeechToText();
   bool _hasText = false;
   bool _isListening = false;
-  Timer? _voiceTimer;
 
   late final AnimationController _pulseController = AnimationController(
     vsync: this,
@@ -50,7 +56,7 @@ class _MessageInputBarState extends State<MessageInputBar>
 
   @override
   void dispose() {
-    _voiceTimer?.cancel();
+    _speech.cancel();
     _pulseController.dispose();
     _controller.dispose();
     super.dispose();
@@ -67,36 +73,74 @@ class _MessageInputBarState extends State<MessageInputBar>
     widget.onSend(text);
   }
 
-  void _toggleVoice() {
+  Future<void> _toggleVoice() async {
     if (_isListening) {
-      _stopVoice(commit: true);
+      await _stopVoice();
     } else {
-      _startVoice();
+      await _startVoice();
     }
   }
 
-  void _startVoice() {
+  Future<void> _startVoice() async {
+    // Android 需要运行时申请麦克风权限
+    final mic = await Permission.microphone.request();
+    if (!mic.isGranted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('需要麦克风权限才能使用语音输入')),
+        );
+      }
+      return;
+    }
+    final available = await _speech.initialize(
+      onError: (_) => _onVoiceEnd(),
+      onStatus: (status) {
+        if (status == 'done' || status == 'notListening') {
+          if (_isListening) _onVoiceEnd();
+        }
+      },
+    );
+    if (!available || !mounted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('语音识别不可用，请确认系统已安装语音识别服务'),
+          ),
+        );
+      }
+      return;
+    }
     setState(() {
       _isListening = true;
       _pulseController.repeat(reverse: true);
     });
-    _voiceTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) _stopVoice(commit: true);
-    });
+    final locale = (await _speech.systemLocale())?.localeId;
+    await _speech.listen(
+      onResult: (result) {
+        if (!mounted) return;
+        final text = result.recognizedWords;
+        _controller.text = text;
+        _controller.selection =
+            TextSelection.collapsed(offset: _controller.text.length);
+      },
+      listenOptions: SpeechListenOptions(
+        listenFor: const Duration(minutes: 1),
+        pauseFor: const Duration(seconds: 3),
+        localeId: locale,
+        onDevice: false,
+      ),
+    );
   }
 
-  void _stopVoice({required bool commit}) {
-    _voiceTimer?.cancel();
+  Future<void> _stopVoice() async {
+    await _speech.stop();
+    _onVoiceEnd();
+  }
+
+  void _onVoiceEnd() {
     _pulseController.stop();
     _pulseController.value = 0;
-    if (commit) {
-      final mock = '语音识别演示：你好，我是 MyAI。';
-      _controller.text =
-          _controller.text.trim().isEmpty ? mock : '${_controller.text.trim()} $mock';
-      _controller.selection =
-          TextSelection.collapsed(offset: _controller.text.length);
-    }
-    setState(() => _isListening = false);
+    if (mounted) setState(() => _isListening = false);
   }
 
   @override
@@ -124,11 +168,7 @@ class _MessageInputBarState extends State<MessageInputBar>
             _iconButton(
               Icons.attach_file_rounded,
               tooltip: '附件',
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('附件功能开发中')),
-                );
-              },
+              onTap: widget.onAttach,
             ),
             const SizedBox(width: 4),
             _iconButton(
@@ -234,7 +274,7 @@ class _MessageInputBarState extends State<MessageInputBar>
               ? const LinearGradient(
                   colors: [SciColors.danger, Color(0xFF8A2E44)],
                 )
-              : const LinearGradient(
+              : LinearGradient(
                   colors: [SciColors.primary, SciColors.secondary],
                 ),
           boxShadow: isGen

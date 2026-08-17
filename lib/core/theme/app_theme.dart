@@ -86,7 +86,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: SciColors.primary, width: 1.4),
+          borderSide: BorderSide(color: SciColors.primary, width: 1.4),
         ),
       ),
       dividerTheme: DividerThemeData(color: border, thickness: 1),

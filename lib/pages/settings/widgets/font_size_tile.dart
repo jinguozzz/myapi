@@ -39,7 +39,7 @@ class _FontTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.text_fields_rounded, color: SciColors.primary, size: 20),
+            Icon(Icons.text_fields_rounded, color: SciColors.primary, size: 20),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -103,7 +103,7 @@ class _FontSliderSheetState extends State<_FontSliderSheet> {
                 const Spacer(),
                 Text(
                   '${(_scale * 100).round()}%',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: SciColors.primary,
                     fontSize: 14,
                   ),
@@ -146,7 +146,7 @@ class _FontSliderSheetState extends State<_FontSliderSheet> {
                     AppState.instance.fontScale.value = 1.0;
                     setState(() => _scale = 1.0);
                   },
-                  child: const Text(
+                  child: Text(
                     '恢复默认',
                     style: TextStyle(color: SciColors.primary, fontSize: 13),
                   ),

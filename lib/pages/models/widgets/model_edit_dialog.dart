@@ -22,11 +22,13 @@ class _Preset {
     required this.name,
     required this.modelId,
     required this.baseUrl,
+    this.supportsVision = false,
   });
 
   final String name;
   final String modelId;
   final String baseUrl;
+  final bool supportsVision;
 }
 
 const _presets = <_Preset>[
@@ -34,21 +36,43 @@ const _presets = <_Preset>[
     name: 'DeepSeek V4 Flash',
     modelId: 'deepseek-v4-flash',
     baseUrl: 'https://api.deepseek.com/v1',
+    supportsVision: false,
   ),
   _Preset(
     name: 'DeepSeek V4 Pro',
     modelId: 'deepseek-v4-pro',
     baseUrl: 'https://api.deepseek.com/v1',
+    supportsVision: false,
   ),
   _Preset(
     name: 'OpenAI GPT-4o',
     modelId: 'gpt-4o',
     baseUrl: 'https://api.openai.com/v1',
+    supportsVision: true,
   ),
   _Preset(
     name: '智谱 GLM-4',
     modelId: 'glm-4',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    supportsVision: false,
+  ),
+  _Preset(
+    name: '硅基流动 Qwen2.5-7B',
+    modelId: 'Qwen/Qwen2.5-7B-Instruct',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    supportsVision: false,
+  ),
+  _Preset(
+    name: '硅基流动 Qwen2.5-Coder',
+    modelId: 'Qwen/Qwen2.5-Coder-7B-Instruct',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    supportsVision: false,
+  ),
+  _Preset(
+    name: '硅基流动 GLM-4-9B',
+    modelId: 'THUDM/glm-4-9b-chat',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    supportsVision: false,
   ),
 ];
 
@@ -85,6 +109,7 @@ class _ModelEditDialogState extends State<_ModelEditDialog> {
   bool _obscureKey = true;
   bool _showAdvanced = false;
   bool _showHeaders = false;
+  late bool _supportsVision = widget.initial?.supportsVision ?? false;
 
   @override
   void dispose() {
@@ -105,6 +130,7 @@ class _ModelEditDialogState extends State<_ModelEditDialog> {
       _nameCtrl.text = preset.name;
       _modelIdCtrl.text = preset.modelId;
       _baseUrlCtrl.text = preset.baseUrl;
+      _supportsVision = preset.supportsVision;
     });
   }
 
@@ -120,6 +146,7 @@ class _ModelEditDialogState extends State<_ModelEditDialog> {
       temperature: double.tryParse(_tempCtrl.text) ?? 0.7,
       maxTokens: int.tryParse(_maxTokensCtrl.text) ?? 4096,
       isDefault: initial?.isDefault ?? false,
+      supportsVision: _supportsVision,
       createdAt: initial?.createdAt ?? DateTime.now(),
       headers: {
         for (final h in _headers)
@@ -207,7 +234,7 @@ class _ModelEditDialogState extends State<_ModelEditDialog> {
                             ),
                             child: Text(
                               p.name,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: SciColors.primary,
                                 fontSize: 12,
                               ),
@@ -250,6 +277,33 @@ class _ModelEditDialogState extends State<_ModelEditDialog> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            '支持图片输入（视觉模型）',
+                            style: TextStyle(
+                              color: SciColors.textPrimary,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        Switch(
+                          value: _supportsVision,
+                          activeThumbColor: SciColors.primary,
+                          onChanged: (v) =>
+                              setState(() => _supportsVision = v),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '关闭时图片仅本地展示，不随消息发送（文本模型必须关闭）',
+                      style: const TextStyle(
+                        color: SciColors.textSecondary,
+                        fontSize: 10,
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 8),
                   _sectionToggle(
@@ -286,12 +340,12 @@ class _ModelEditDialogState extends State<_ModelEditDialog> {
                       child: TextButton.icon(
                         onPressed: () =>
                             setState(() => _headers.add(_HeaderRow())),
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.add_rounded,
                           size: 16,
                           color: SciColors.primary,
                         ),
-                        label: const Text(
+                        label: Text(
                           '添加请求头',
                           style: TextStyle(
                             color: SciColors.primary,
@@ -322,7 +376,7 @@ class _ModelEditDialogState extends State<_ModelEditDialog> {
                             vertical: 9,
                           ),
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(
+                            gradient: LinearGradient(
                               colors: [SciColors.primary, SciColors.secondary],
                             ),
                             borderRadius: BorderRadius.circular(10),
@@ -439,7 +493,7 @@ class _ModelEditDialogState extends State<_ModelEditDialog> {
           const SizedBox(width: 4),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               color: SciColors.primary,
               fontSize: 13,
               letterSpacing: 0.5,

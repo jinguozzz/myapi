@@ -14,7 +14,7 @@ Future<void> showAboutInfoDialog(BuildContext context) {
             height: 36,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 colors: [SciColors.primary, SciColors.secondary],
               ),
               boxShadow: SciColors.neonShadow(blur: 12),
@@ -36,7 +36,7 @@ Future<void> showAboutInfoDialog(BuildContext context) {
           ),
         ],
       ),
-      content: const Column(
+      content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
@@ -62,7 +62,7 @@ Future<void> showAboutInfoDialog(BuildContext context) {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(),
-          child: const Text(
+          child: Text(
             '确定',
             style: TextStyle(color: SciColors.primary),
           ),

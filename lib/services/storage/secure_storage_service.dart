@@ -16,4 +16,7 @@ class SecureStorageService {
   Future<String?> readApiKey(String modelId) => _storage.read(key: _key(modelId));
 
   Future<void> deleteApiKey(String modelId) => _storage.delete(key: _key(modelId));
+
+  /// 清空全部加密存储（清除数据时调用）
+  Future<void> deleteAllKeys() => _storage.deleteAll();
 }
