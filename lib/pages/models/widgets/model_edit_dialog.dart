@@ -96,7 +96,8 @@ class _ModelEditDialogState extends State<_ModelEditDialog> {
   late final _baseUrlCtrl =
       TextEditingController(text: widget.initial?.baseUrl ?? '');
   late final _apiKeyCtrl =
-      TextEditingController(text: widget.initial?.apiKey ?? '');
+      TextEditingController(text: _cleanApiKey(widget.initial?.apiKey));
+  late final bool _keyWasInvalid = !_isCleanKey(widget.initial?.apiKey);
   late final _tempCtrl =
       TextEditingController(text: (widget.initial?.temperature ?? 0.7).toString());
   late final _maxTokensCtrl =
@@ -159,6 +160,16 @@ class _ModelEditDialogState extends State<_ModelEditDialog> {
 
   String? _required(String? v) =>
       (v == null || v.trim().isEmpty) ? '此项必填' : null;
+
+  static bool _isCleanKey(String? key) {
+    if (key == null || key.isEmpty) return true;
+    return !key.contains('\n') &&
+        !key.contains('\r') &&
+        key.length <= 512;
+  }
+
+  static String _cleanApiKey(String? key) =>
+      _isCleanKey(key) ? (key ?? '') : '';
 
   @override
   Widget build(BuildContext context) {
@@ -460,7 +471,14 @@ class _ModelEditDialogState extends State<_ModelEditDialog> {
           style: const TextStyle(color: SciColors.textPrimary, fontSize: 14),
           decoration: InputDecoration(
             hintText: 'sk-...',
+            helperText: _keyWasInvalid
+                ? '检测到原 Key 异常，已清空，请重新填写'
+                : null,
             isDense: true,
+            helperStyle: const TextStyle(
+              color: SciColors.danger,
+              fontSize: 10,
+            ),
             suffixIcon: IconButton(
               onPressed: () => setState(() => _obscureKey = !_obscureKey),
               icon: Icon(

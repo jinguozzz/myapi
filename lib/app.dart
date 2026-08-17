@@ -18,10 +18,11 @@ class MyAIApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    SciColors.applyAccent(AppState.instance.accentColor.value);
     return AnimatedBuilder(
       animation: _appListenable,
       builder: (context, _) {
+        // 主题色变化时先应用主色，再重建 UI（必须放在 builder 内）
+        SciColors.applyAccent(AppState.instance.accentColor.value);
         return MaterialApp(
           title: 'MyAI Companion',
           debugShowCheckedModeBanner: false,
@@ -37,7 +38,10 @@ class MyAIApp extends StatelessWidget {
               child: child!,
             );
           },
-          home: const HomePage(),
+          home: HomePage(
+            // 主题色变化时强制重建整棵 UI，使新的主色生效（状态由 AppState 保存）
+            key: ValueKey(AppState.instance.accentColor.value),
+          ),
         );
       },
     );

@@ -57,11 +57,22 @@ class ChatService {
     required ModelConfig model,
     required List<Message> messages,
   }) async* {
+    // 校验 API Key，避免把脏数据塞进请求头导致 HTTP 格式错误
+    final apiKey = model.apiKey.trim();
+    if (apiKey.isEmpty) {
+      throw ChatException('API Key 未配置，请到「模型」页填写');
+    }
+    if (apiKey.contains('\n') || apiKey.contains('\r') || apiKey.length > 512) {
+      throw ChatException(
+        'API Key 格式异常（可能是被聊天内容覆盖了），请到「模型」页重新填写正确的 Key',
+      );
+    }
+
     final base = model.baseUrl.replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/chat/completions');
 
     final headers = <String, String>{
-      'Authorization': 'Bearer ${model.apiKey}',
+      'Authorization': 'Bearer $apiKey',
       'Content-Type': 'application/json',
       'Accept': 'text/event-stream',
       ...model.headers,

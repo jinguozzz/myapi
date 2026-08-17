@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
@@ -14,6 +15,8 @@ class MessageInputBar extends StatefulWidget {
     required this.onStop,
     required this.onCopy,
     required this.onAttach,
+    required this.onToggleWebSearch,
+    required this.webSearchEnabled,
     required this.isGenerating,
   });
 
@@ -25,6 +28,12 @@ class MessageInputBar extends StatefulWidget {
 
   /// 打开附件选择
   final VoidCallback onAttach;
+
+  /// 切换联网搜索
+  final VoidCallback onToggleWebSearch;
+
+  /// 是否已开启联网搜索
+  final bool webSearchEnabled;
   final bool isGenerating;
 
   @override
@@ -37,6 +46,7 @@ class _MessageInputBarState extends State<MessageInputBar>
   final SpeechToText _speech = SpeechToText();
   bool _hasText = false;
   bool _isListening = false;
+  String _lastRecognized = '';
 
   late final AnimationController _pulseController = AnimationController(
     vsync: this,
@@ -73,68 +83,98 @@ class _MessageInputBarState extends State<MessageInputBar>
     widget.onSend(text);
   }
 
-  Future<void> _toggleVoice() async {
-    if (_isListening) {
-      await _stopVoice();
-    } else {
-      await _startVoice();
-    }
-  }
-
   Future<void> _startVoice() async {
-    // Android 需要运行时申请麦克风权限
-    final mic = await Permission.microphone.request();
-    if (!mic.isGranted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('需要麦克风权限才能使用语音输入')),
-        );
-      }
-      return;
-    }
-    final available = await _speech.initialize(
-      onError: (_) => _onVoiceEnd(),
-      onStatus: (status) {
-        if (status == 'done' || status == 'notListening') {
-          if (_isListening) _onVoiceEnd();
+    try {
+      _lastRecognized = '';
+      // Android 需要运行时申请麦克风权限
+      final mic = await Permission.microphone.request();
+      if (!mic.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('需要麦克风权限才能使用语音输入')),
+          );
         }
-      },
-    );
-    if (!available || !mounted) {
+        return;
+      }
+      final available = await _speech.initialize(
+        onError: (_) => _onVoiceEnd(),
+        onStatus: (status) {
+          if (status == 'done' || status == 'notListening') {
+            if (_isListening) _onVoiceEnd();
+          }
+        },
+      );
+      if (!available || !mounted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('语音识别不可用，请确认系统已安装语音识别服务'),
+            ),
+          );
+        }
+        return;
+      }
+      setState(() {
+        _isListening = true;
+        _pulseController.repeat(reverse: true);
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('语音识别不可用，请确认系统已安装语音识别服务'),
-          ),
+          const SnackBar(content: Text('正在聆听，松开发送…')),
         );
       }
-      return;
+      final locale = (await _speech.systemLocale())?.localeId;
+      await _speech.listen(
+        onResult: (result) {
+          if (!mounted) return;
+          final text = result.recognizedWords;
+          _lastRecognized = text;
+          _controller.text = text;
+          _controller.selection =
+              TextSelection.collapsed(offset: _controller.text.length);
+        },
+        listenOptions: SpeechListenOptions(
+          listenFor: const Duration(minutes: 1),
+          pauseFor: const Duration(seconds: 3),
+          localeId: locale,
+          onDevice: false,
+        ),
+      );
+    } on PlatformException catch (e) {
+      if (mounted) {
+        _onVoiceEnd();
+        final msg = e.code == 'recognizerNotAvailable'
+            ? '设备未检测到语音识别服务。\n请安装/启用 Google 应用后重试，或使用输入法自带的语音输入。'
+            : '语音输入失败：$e';
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } catch (e) {
+      if (mounted) {
+        _onVoiceEnd();
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('语音输入失败：$e')));
+      }
     }
-    setState(() {
-      _isListening = true;
-      _pulseController.repeat(reverse: true);
-    });
-    final locale = (await _speech.systemLocale())?.localeId;
-    await _speech.listen(
-      onResult: (result) {
-        if (!mounted) return;
-        final text = result.recognizedWords;
-        _controller.text = text;
-        _controller.selection =
-            TextSelection.collapsed(offset: _controller.text.length);
-      },
-      listenOptions: SpeechListenOptions(
-        listenFor: const Duration(minutes: 1),
-        pauseFor: const Duration(seconds: 3),
-        localeId: locale,
-        onDevice: false,
-      ),
-    );
   }
 
-  Future<void> _stopVoice() async {
-    await _speech.stop();
+  /// 松开发送 / 取消不发送（保留在输入框）
+  Future<void> _finishVoice({required bool send}) async {
+    try {
+      await _speech.stop();
+    } catch (_) {}
     _onVoiceEnd();
+    final text = _lastRecognized.trim();
+    _lastRecognized = '';
+    if (text.isEmpty || !mounted) return;
+    if (send) {
+      _controller.clear();
+      widget.onSend(text);
+    } else {
+      _controller.text = text;
+      _controller.selection =
+          TextSelection.collapsed(offset: _controller.text.length);
+    }
   }
 
   void _onVoiceEnd() {
@@ -179,6 +219,13 @@ class _MessageInputBarState extends State<MessageInputBar>
             const SizedBox(width: 4),
             _micButton(),
             const SizedBox(width: 4),
+            _iconButton(
+              Icons.public_rounded,
+              tooltip: widget.webSearchEnabled ? '联网搜索：开' : '联网搜索：关',
+              active: widget.webSearchEnabled,
+              onTap: widget.onToggleWebSearch,
+            ),
+            const SizedBox(width: 4),
             Expanded(
               child: TextField(
                 controller: _controller,
@@ -190,7 +237,7 @@ class _MessageInputBarState extends State<MessageInputBar>
                 ),
                 decoration: InputDecoration(
                   hintText: _isListening
-                      ? '正在聆听…（再次点击结束）'
+                      ? '正在聆听… 松开发送'
                       : '输入消息，Enter 发送…',
                   hintStyle: TextStyle(
                     color: _isListening
@@ -214,7 +261,12 @@ class _MessageInputBarState extends State<MessageInputBar>
     );
   }
 
-  Widget _iconButton(IconData icon, {required VoidCallback onTap, String? tooltip}) {
+  Widget _iconButton(
+    IconData icon, {
+    required VoidCallback onTap,
+    String? tooltip,
+    bool active = false,
+  }) {
     return Tooltip(
       message: tooltip ?? '',
       child: InkWell(
@@ -224,7 +276,9 @@ class _MessageInputBarState extends State<MessageInputBar>
           padding: const EdgeInsets.all(8),
           child: Icon(
             icon,
-            color: SciColors.textSecondaryOf(context),
+            color: active
+                ? SciColors.primary
+                : SciColors.textSecondaryOf(context),
             size: 22,
           ),
         ),
@@ -234,10 +288,11 @@ class _MessageInputBarState extends State<MessageInputBar>
 
   Widget _micButton() {
     return Tooltip(
-      message: _isListening ? '结束语音输入' : '语音输入',
-      child: InkWell(
-        onTap: _toggleVoice,
-        borderRadius: BorderRadius.circular(10),
+      message: '按住说话，松开发送',
+      child: GestureDetector(
+        onLongPressStart: (_) => _startVoice(),
+        onLongPressEnd: (_) => _finishVoice(send: true),
+        onLongPressCancel: () => _finishVoice(send: false),
         child: Padding(
           padding: const EdgeInsets.all(8),
           child: AnimatedBuilder(

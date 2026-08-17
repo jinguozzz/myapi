@@ -14,6 +14,8 @@ import '../../models/conversation.dart';
 import '../../models/message.dart';
 import '../../models/model_config.dart';
 import '../../services/network/chat_service.dart';
+import '../../services/network/weather_service.dart';
+import '../../services/network/web_search_service.dart';
 import '../../services/storage/attachment_storage.dart';
 import 'widgets/chat_app_bar.dart';
 import 'widgets/message_bubble.dart';
@@ -31,10 +33,15 @@ class _ChatPageState extends State<ChatPage> {
   static const int _maxMessages = 200;
 
   final ChatService _chatService = ChatService();
+  final WebSearchService _webSearch = WebSearchService();
+  final WeatherService _weather = WeatherService();
   final ImagePicker _imagePicker = ImagePicker();
   final Uuid _uuid = const Uuid();
   final List<Message> _messages = [];
   final List<Attachment> _pendingAttachments = [];
+
+  /// 是否开启联网搜索
+  bool _webSearchEnabled = false;
 
   bool _showWelcome = true;
   bool _isGenerating = false;
@@ -130,7 +137,76 @@ class _ChatPageState extends State<ChatPage> {
     });
     _persistMessage(userMsg);
     _scrollToBottom();
-    _startStreaming(model);
+
+    // 联网搜索：抓取结果作为上下文注入
+    List<Message> requestMessages = _buildRequestMessages();
+    if (_webSearchEnabled) {
+      _toast('正在联网搜索…');
+      final context = await _fetchSearchContext(trimmed);
+      if (context != null) {
+        requestMessages = [
+          Message(
+            id: _uuid.v4(),
+            role: 'system',
+            content: context,
+            timestamp: DateTime.now(),
+          ),
+          ...requestMessages,
+        ];
+        _toast('已获取联网结果，正在回答');
+      } else {
+        _toast('联网搜索未获取到结果，已直接提问');
+      }
+    }
+    _startStreaming(model, messages: requestMessages);
+  }
+
+  /// 抓取搜索结果并组装为系统上下文（含实时天气，若问题涉及天气）
+  Future<String?> _fetchSearchContext(String query) async {
+    final parts = <String>[];
+
+    // 1. 天气类问题：实时天气
+    final weather = await _tryWeather(query);
+    if (weather != null) parts.add(weather);
+
+    // 2. 通用联网搜索
+    try {
+      final results = await _webSearch.search(query);
+      if (results.isNotEmpty) {
+        final sb = StringBuffer()
+          ..writeln('以下是联网搜索到的资料：')
+          ..writeln();
+        for (var i = 0; i < results.length; i++) {
+          final r = results[i];
+          sb
+            ..writeln('[${i + 1}] ${r.title}')
+            ..writeln(r.snippet.isEmpty ? '（无摘要）' : r.snippet)
+            ..writeln('来源：${r.url}')
+            ..writeln();
+        }
+        parts.add(sb.toString());
+      }
+    } catch (_) {}
+
+    return parts.isEmpty ? null : parts.join('\n\n');
+  }
+
+  /// 天气类问题：识别城市并查询实时天气
+  Future<String?> _tryWeather(String query) async {
+    final isWeather = RegExp('天气|气温|温度|下雨|下雪|降雨|湿度|台风')
+        .hasMatch(query);
+    if (!isWeather) return null;
+    final city = _weather.extractCity(query);
+    if (city == null) return null;
+    try {
+      final info = await _weather.fetch(city);
+      if (info == null) return null;
+      return '用户询问「$city」的实时天气。\n'
+          '实时天气数据（来自 wttr.in）：\n$info\n'
+          '请基于以上实时天气数据回答用户问题。';
+    } catch (_) {
+      return null;
+    }
   }
 
   /// 附件入口：拍照 / 选图片 / 选文件
@@ -260,8 +336,8 @@ class _ChatPageState extends State<ChatPage> {
     AttachmentStorage.delete(a.path);
   }
 
-  void _startStreaming(ModelConfig model) {
-    final requestMessages = _buildRequestMessages();
+  void _startStreaming(ModelConfig model, {List<Message>? messages}) {
+    final requestMessages = messages ?? _buildRequestMessages();
     try {
       final stream =
           _chatService.streamChat(model: model, messages: requestMessages);
@@ -682,10 +758,13 @@ class _ChatPageState extends State<ChatPage> {
             ),
           MessageInputBar(
             isGenerating: _isGenerating,
+            webSearchEnabled: _webSearchEnabled,
             onSend: _handleSend,
             onStop: _stopGenerating,
             onCopy: _copyLastAiReply,
             onAttach: _onAttach,
+            onToggleWebSearch: () =>
+                setState(() => _webSearchEnabled = !_webSearchEnabled),
           ),
         ],
       ),
