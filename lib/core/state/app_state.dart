@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/conversation.dart';
@@ -13,10 +14,53 @@ import '../theme/app_theme.dart';
 /// 轻量全局状态（主题、字体缩放、模型、对话）。
 /// 不引入第三方状态管理，保持轻量；后续可平滑迁移至 Riverpod。
 class AppState {
-  AppState._();
+  AppState._() {
+    // 设置变化时持久化
+    themeMode.addListener(_saveSettings);
+    accentColor.addListener(_saveSettings);
+    fontScale.addListener(_saveSettings);
+    contextTurns.addListener(_saveSettings);
+  }
 
   /// 全局单例
   static final AppState instance = AppState._();
+
+  static const _prefsThemeKey = 'settings_theme';
+  static const _prefsAccentKey = 'settings_accent';
+  static const _prefsFontKey = 'settings_font_scale';
+  static const _prefsTurnsKey = 'settings_context_turns';
+
+  /// 启动时恢复设置（主题 / 主色 / 字体 / 上下文轮数）
+  Future<void> initSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    final themeName = prefs.getString(_prefsThemeKey);
+    if (themeName != null) {
+      themeMode.value = AppThemeMode.values.firstWhere(
+        (m) => m.name == themeName,
+        orElse: () => AppThemeMode.dark,
+      );
+    }
+    final accent = prefs.getInt(_prefsAccentKey);
+    if (accent != null) {
+      accentColor.value = Color(accent);
+    }
+    final font = prefs.getDouble(_prefsFontKey);
+    if (font != null) {
+      fontScale.value = font;
+    }
+    final turns = prefs.getInt(_prefsTurnsKey);
+    if (turns != null) {
+      contextTurns.value = turns;
+    }
+  }
+
+  Future<void> _saveSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsThemeKey, themeMode.value.name);
+    await prefs.setInt(_prefsAccentKey, accentColor.value.toARGB32());
+    await prefs.setDouble(_prefsFontKey, fontScale.value);
+    await prefs.setInt(_prefsTurnsKey, contextTurns.value);
+  }
 
   /// 主题模式
   final ValueNotifier<AppThemeMode> themeMode =

@@ -81,7 +81,15 @@ class ChatService {
     final body = jsonEncode({
       'model': model.modelId,
       'messages': await _buildApiMessages(
-        messages,
+        [
+          // 注入设备当前时间，模型无时钟，否则"今天几号"只能瞎猜
+          Message(
+            id: 'system-time',
+            role: 'system',
+            content: _timeContext(),
+          ),
+          ...messages,
+        ],
         supportsVision: model.supportsVision,
       ),
       'temperature': model.temperature,
@@ -114,6 +122,18 @@ class ChatService {
     }
 
     yield* const SseClient().decode(response.stream);
+  }
+
+  /// 当前时间上下文（模型无时钟，由 App 注入设备本地时间）
+  String _timeContext() {
+    final now = DateTime.now();
+    const weekdays = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
+    final wd = weekdays[now.weekday - 1];
+    final hh = now.hour.toString().padLeft(2, '0');
+    final mm = now.minute.toString().padLeft(2, '0');
+    return '当前时间：${now.year}年${now.month}月${now.day}日 $wd $hh:$mm'
+        '（这是设备本地时间。回答用户关于"今天日期/几点/星期几"的问题时，'
+        '请以此为准，不要猜测或编造其他日期。）';
   }
 
   /// 组装 API 消息：

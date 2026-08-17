@@ -23,12 +23,16 @@ class _Preset {
     required this.modelId,
     required this.baseUrl,
     this.supportsVision = false,
+    this.maxTokens,
   });
 
   final String name;
   final String modelId;
   final String baseUrl;
   final bool supportsVision;
+
+  /// 该模型允许的 max_tokens 上限（如 GLM-4V-Flash 仅 1024）
+  final int? maxTokens;
 }
 
 const _presets = <_Preset>[
@@ -73,6 +77,19 @@ const _presets = <_Preset>[
     modelId: 'THUDM/glm-4-9b-chat',
     baseUrl: 'https://api.siliconflow.cn/v1',
     supportsVision: false,
+  ),
+  _Preset(
+    name: '智谱 GLM-4V-Flash（免费看图）',
+    modelId: 'glm-4v-flash',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    supportsVision: true,
+    maxTokens: 1024,
+  ),
+  _Preset(
+    name: '硅基流动 Qwen2.5-VL（看图）',
+    modelId: 'Qwen/Qwen2.5-VL-7B-Instruct',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    supportsVision: true,
   ),
 ];
 
@@ -132,6 +149,9 @@ class _ModelEditDialogState extends State<_ModelEditDialog> {
       _modelIdCtrl.text = preset.modelId;
       _baseUrlCtrl.text = preset.baseUrl;
       _supportsVision = preset.supportsVision;
+      if (preset.maxTokens != null) {
+        _maxTokensCtrl.text = '${preset.maxTokens}';
+      }
     });
   }
 
