@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/state/app_state.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/sci_colors.dart';
 
 /// 主题设置项
 class ThemeSettingTile extends StatelessWidget {
   const ThemeSettingTile({super.key});
 
-  String _label(ThemeMode mode) => switch (mode) {
-        ThemeMode.system => '跟随系统',
-        ThemeMode.light => '亮色',
-        ThemeMode.dark => '暗色',
+  String _label(AppThemeMode mode) => switch (mode) {
+        AppThemeMode.system => '跟随系统',
+        AppThemeMode.light => '亮色',
+        AppThemeMode.dark => '暗色',
+        AppThemeMode.anime => '动漫暖色',
       };
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeMode>(
+    return ValueListenableBuilder<AppThemeMode>(
       valueListenable: AppState.instance.themeMode,
       builder: (context, mode, _) {
         return _SettingTile(
@@ -28,7 +30,7 @@ class ThemeSettingTile extends StatelessWidget {
     );
   }
 
-  void _showPicker(BuildContext context, ThemeMode current) {
+  void _showPicker(BuildContext context, AppThemeMode current) {
     showModalBottomSheet<void>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -48,11 +50,16 @@ class ThemeSettingTile extends StatelessWidget {
               ),
             ),
             for (final mode in const [
-              ThemeMode.system,
-              ThemeMode.light,
-              ThemeMode.dark,
+              AppThemeMode.system,
+              AppThemeMode.light,
+              AppThemeMode.dark,
+              AppThemeMode.anime,
             ])
               ListTile(
+                leading: mode == AppThemeMode.anime
+                    ? const Icon(Icons.auto_awesome_rounded,
+                        color: SciColors.danger, size: 20)
+                    : null,
                 title: Text(
                   _label(mode),
                   style: const TextStyle(

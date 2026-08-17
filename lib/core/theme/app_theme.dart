@@ -2,7 +2,30 @@ import 'package:flutter/material.dart';
 
 import 'sci_colors.dart';
 
-/// 应用主题（科幻风格）
+/// 主题模式（比 Flutter 的 ThemeMode 多一个「动漫暖色」）
+enum AppThemeMode { system, light, dark, anime }
+
+/// 主题种类标记（用于 SciColors 区分动漫暖色配色）
+class ThemeKindData extends ThemeExtension<ThemeKindData> {
+  const ThemeKindData({required this.anime});
+
+  final bool anime;
+
+  @override
+  ThemeExtension<ThemeKindData> copyWith({bool? anime}) =>
+      ThemeKindData(anime: anime ?? this.anime);
+
+  @override
+  ThemeExtension<ThemeKindData> lerp(
+    ThemeExtension<ThemeKindData>? other,
+    double t,
+  ) =>
+      other is ThemeKindData
+          ? ThemeKindData(anime: t < 0.5 ? anime : other.anime)
+          : this;
+}
+
+/// 应用主题（科幻 / 动漫暖色）
 class AppTheme {
   AppTheme._();
 
@@ -44,6 +67,27 @@ class AppTheme {
         border: const Color(0xFFD6E2F0),
       );
 
+  /// 动漫暖色调：暖奶油底 + 粉彩点缀
+  static ThemeData anime() => _build(
+        scheme: ColorScheme.light(
+          primary: SciColors.primary,
+          onPrimary: Colors.white,
+          secondary: const Color(0xFF9B8CFF),
+          onSecondary: Colors.white,
+          surface: SciColors.animeSurface,
+          onSurface: SciColors.animeTextPrimary,
+          error: const Color(0xFFFF5C7A),
+          onError: Colors.white,
+        ),
+        background: SciColors.animeBackground,
+        surface: SciColors.animeSurface,
+        fill: SciColors.animeSurfaceLight,
+        textPrimary: SciColors.animeTextPrimary,
+        textSecondary: SciColors.animeTextSecondary,
+        border: SciColors.animeBorder,
+        anime: true,
+      );
+
   static ThemeData _build({
     required ColorScheme scheme,
     required Color background,
@@ -52,12 +96,14 @@ class AppTheme {
     required Color textPrimary,
     required Color textSecondary,
     required Color border,
+    bool anime = false,
   }) {
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: background,
       splashFactory: InkRipple.splashFactory,
+      extensions: [ThemeKindData(anime: anime)],
       appBarTheme: AppBarTheme(
         backgroundColor: background,
         elevation: 0,
@@ -112,9 +158,9 @@ class AppTheme {
         ),
         contentTextStyle: TextStyle(color: textPrimary, fontSize: 14),
       ),
-      bottomSheetTheme: const BottomSheetThemeData(
-        backgroundColor: SciColors.surface,
-        shape: RoundedRectangleBorder(
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: surface,
+        shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
       ),

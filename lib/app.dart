@@ -23,12 +23,29 @@ class MyAIApp extends StatelessWidget {
       builder: (context, _) {
         // 主题色变化时先应用主色，再重建 UI（必须放在 builder 内）
         SciColors.applyAccent(AppState.instance.accentColor.value);
+        final mode = AppState.instance.themeMode.value;
+        late final ThemeData theme;
+        late final ThemeMode themeMode;
+        switch (mode) {
+          case AppThemeMode.anime:
+            theme = AppTheme.anime();
+            themeMode = ThemeMode.light;
+          case AppThemeMode.light:
+            theme = AppTheme.light();
+            themeMode = ThemeMode.light;
+          case AppThemeMode.dark:
+            theme = AppTheme.dark();
+            themeMode = ThemeMode.dark;
+          case AppThemeMode.system:
+            theme = AppTheme.light();
+            themeMode = ThemeMode.system;
+        }
         return MaterialApp(
           title: 'MyAI Companion',
           debugShowCheckedModeBanner: false,
-          theme: AppTheme.light(),
+          theme: theme,
           darkTheme: AppTheme.dark(),
-          themeMode: AppState.instance.themeMode.value,
+          themeMode: themeMode,
           builder: (context, child) {
             final scale = AppState.instance.fontScale.value;
             return MediaQuery(
@@ -39,8 +56,8 @@ class MyAIApp extends StatelessWidget {
             );
           },
           home: HomePage(
-            // 主题色变化时强制重建整棵 UI，使新的主色生效（状态由 AppState 保存）
-            key: ValueKey(AppState.instance.accentColor.value),
+            // 主题/主题色变化时强制重建整棵 UI（状态由 AppState 保存）
+            key: ValueKey('${mode.name}-${AppState.instance.accentColor.value}'),
           ),
         );
       },

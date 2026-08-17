@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
@@ -13,6 +14,7 @@ import '../../models/attachment.dart';
 import '../../models/conversation.dart';
 import '../../models/message.dart';
 import '../../models/model_config.dart';
+import '../../models/prompt_template.dart';
 import '../../services/network/chat_service.dart';
 import '../../services/network/weather_service.dart';
 import '../../services/network/web_search_service.dart';
@@ -36,9 +38,13 @@ class _ChatPageState extends State<ChatPage> {
   final WebSearchService _webSearch = WebSearchService();
   final WeatherService _weather = WeatherService();
   final ImagePicker _imagePicker = ImagePicker();
+  final FlutterTts _tts = FlutterTts();
   final Uuid _uuid = const Uuid();
   final List<Message> _messages = [];
   final List<Attachment> _pendingAttachments = [];
+
+  /// 正在朗读的消息 ID
+  String? _speakingId;
 
   /// 是否开启联网搜索
   bool _webSearchEnabled = false;
@@ -75,6 +81,7 @@ class _ChatPageState extends State<ChatPage> {
     AppState.instance.currentModel.removeListener(_onModelChanged);
     AppState.instance.openConversationId.removeListener(_onOpenRequest);
     _subscription?.cancel();
+    _tts.stop();
     _scrollController.dispose();
     super.dispose();
   }
@@ -598,6 +605,36 @@ class _ChatPageState extends State<ChatPage> {
             ),
             if (msg.role == 'assistant')
               ListTile(
+                leading: Icon(
+                    _speakingId == msg.id
+                        ? Icons.stop_rounded
+                        : Icons.volume_up_outlined,
+                    color: SciColors.primary,
+                    size: 20),
+                title: Text(
+                  _speakingId == msg.id ? '停止朗读' : '朗读回复',
+                  style: const TextStyle(
+                      color: SciColors.textPrimary, fontSize: 14),
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _toggleSpeak(msg);
+                },
+              ),
+            if (msg.role == 'user')
+              ListTile(
+                leading: Icon(Icons.edit_outlined,
+                    color: SciColors.primary, size: 20),
+                title: const Text('编辑消息',
+                    style:
+                        TextStyle(color: SciColors.textPrimary, fontSize: 14)),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _editMessage(msg);
+                },
+              ),
+            if (msg.role == 'assistant')
+              ListTile(
                 leading: Icon(Icons.refresh_rounded,
                     color: SciColors.primary, size: 20),
                 title: const Text('从此处重新生成',
@@ -635,6 +672,169 @@ class _ChatPageState extends State<ChatPage> {
     }
     await AttachmentStorage.deleteAll(msg.attachments.map((a) => a.path));
     AppState.instance.syncCurrentMessages(_messages);
+  }
+
+  /// 编辑用户消息内容
+  Future<void> _editMessage(Message msg) async {
+    final ctrl = TextEditingController(text: msg.content);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('编辑消息'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          minLines: 2,
+          maxLines: 6,
+          style: const TextStyle(color: SciColors.textPrimary),
+          decoration: const InputDecoration(hintText: '修改内容'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text(
+              '取消',
+              style: TextStyle(color: SciColors.textSecondary),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text),
+            child: Text('保存', style: TextStyle(color: SciColors.primary)),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    final text = result?.trim();
+    if (text == null || text.isEmpty || !mounted) return;
+    final updated = msg.copyWith(content: text);
+    setState(() {
+      final i = _messages.indexOf(msg);
+      if (i >= 0) _messages[i] = updated;
+    });
+    await AppState.instance.conversationRepository
+        .updateMessageContent(msg.id, text);
+    AppState.instance.syncCurrentMessages(_messages);
+    _toast('已更新消息');
+  }
+
+  /// 朗读 / 停止朗读 AI 回复
+  Future<void> _toggleSpeak(Message msg) async {
+    try {
+      if (_speakingId == msg.id) {
+        await _tts.stop();
+        _speakingId = null;
+        return;
+      }
+      await _tts.stop();
+      // Android 检查是否有语音合成引擎
+      final engines = (await _tts.getEngines) ?? <dynamic>[];
+      if (engines.isEmpty) {
+        _toast('设备未安装语音合成引擎（如 Google TTS / 讯飞语音），无法朗读');
+        return;
+      }
+      await _tts.awaitSpeakCompletion(true);
+      await _tts.setLanguage('zh-CN');
+      await _tts.setSpeechRate(0.5);
+      await _tts.setPitch(1.0);
+      final result = await _tts.speak(msg.content);
+      if (result == 1) {
+        _speakingId = msg.id;
+      } else {
+        _toast('朗读失败，请检查语音合成引擎设置');
+      }
+    } catch (e) {
+      _toast('朗读失败：$e');
+    }
+  }
+
+  /// 应用 Prompt 模板：注入系统提示词
+  Future<void> _applyTemplate() async {
+    final template = await showModalBottomSheet<PromptTemplate>(
+      context: context,
+      backgroundColor: SciColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final categories = <String>[];
+        for (final t in promptTemplates) {
+          if (!categories.contains(t.category)) categories.add(t.category);
+        }
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'Prompt 模板',
+                  style: TextStyle(
+                    color: SciColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+              for (final category in categories) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                  child: Text(
+                    category,
+                    style: TextStyle(
+                      color: SciColors.primary,
+                      fontSize: 12,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+                for (final t in promptTemplates
+                    .where((t) => t.category == category))
+                  ListTile(
+                    leading: Icon(Icons.auto_awesome_rounded,
+                        color: SciColors.primary, size: 18),
+                    title: Text(
+                      t.title,
+                      style: const TextStyle(
+                          color: SciColors.textPrimary, fontSize: 14),
+                    ),
+                    subtitle: Text(
+                      t.prompt,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: SciColors.textSecondary, fontSize: 11),
+                    ),
+                    onTap: () => Navigator.of(ctx).pop(t),
+                  ),
+              ],
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (template == null || !mounted) return;
+    var conv = _conversation;
+    if (conv == null) {
+      conv = await AppState.instance.newConversation();
+      if (!mounted) return;
+    }
+    final sysMsg = Message(
+      id: _uuid.v4(),
+      role: 'system',
+      content: template.prompt,
+      timestamp: DateTime.now(),
+    );
+    setState(() {
+      _messages.add(sysMsg);
+      _trimMemoryMessages();
+    });
+    _persistMessage(sysMsg);
+    AppState.instance.syncCurrentMessages(_messages);
+    _scrollToBottom();
+    _toast('已应用模板：${template.title}');
   }
 
   /// 从指定消息处截断并重新生成
@@ -687,6 +887,7 @@ class _ChatPageState extends State<ChatPage> {
         onNewConversation: _newConversation,
         onRegenerate: _regenerate,
         onClearConversation: _clearConversation,
+        onApplyTemplate: _applyTemplate,
       ),
       body: Column(
         children: [
@@ -713,6 +914,12 @@ class _ChatPageState extends State<ChatPage> {
                   );
                 }
                 final msg = _messages[index];
+                if (msg.role == 'system') {
+                  return _SystemBanner(
+                    text: msg.content,
+                    onRemove: () => _deleteMessage(msg),
+                  );
+                }
                 return MessageBubble(
                   role: msg.role,
                   content: msg.content,
@@ -850,6 +1057,63 @@ class _PendingChip extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 系统提示横幅（Prompt 模板）
+class _SystemBanner extends StatelessWidget {
+  const _SystemBanner({required this.text, required this.onRemove});
+
+  final String text;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.center,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        constraints: const BoxConstraints(maxWidth: 360),
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+        decoration: BoxDecoration(
+          color: SciColors.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: SciColors.primary.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.auto_awesome_rounded,
+                color: SciColors.primary, size: 16),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                text,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: SciColors.textPrimaryOf(context),
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            InkWell(
+              onTap: onRemove,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(Icons.close_rounded,
+                    color: SciColors.textSecondaryOf(context), size: 16),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

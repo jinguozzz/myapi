@@ -40,7 +40,7 @@ Future<void> showAboutInfoDialog(BuildContext context) {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            '版本 v1.0.0',
+            '版本 v1.1.0',
             style: TextStyle(
               color: SciColors.primary,
               fontSize: 13,

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_theme.dart';
+
 /// 科幻风格配色
 class SciColors {
   SciColors._();
@@ -40,6 +42,22 @@ class SciColors {
   /// 霓虹发光（阴影）——随主色联动
   static Color glow = const Color(0x4D00E5FF);
 
+  // ---- 亮色（浅色深空）----
+  static const Color lightBackground = Color(0xFFEAF3FB);
+  static const Color lightSurface = Color(0xFFF7FBFF);
+  static const Color lightSurfaceLight = Color(0xFFEDF3FA);
+  static const Color lightTextPrimary = Color(0xFF0E1B2E);
+  static const Color lightTextSecondary = Color(0xFF4A5A72);
+  static const Color lightBorder = Color(0xFFD6E2F0);
+
+  // ---- 动漫暖色调 ----
+  static const Color animeBackground = Color(0xFFFFF6EE);
+  static const Color animeSurface = Color(0xFFFFFCF8);
+  static const Color animeSurfaceLight = Color(0xFFFFEFE1);
+  static const Color animeTextPrimary = Color(0xFF5A4637);
+  static const Color animeTextSecondary = Color(0xFF9C8572);
+  static const Color animeBorder = Color(0xFFF0DFCC);
+
   /// 应用自定义霓虹主题色
   static void applyAccent(Color color) {
     primary = color;
@@ -50,23 +68,39 @@ class SciColors {
   static bool isDark(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark;
 
-  static Color backgroundOf(BuildContext context) =>
-      isDark(context) ? background : const Color(0xFFEAF3FB);
+  /// 是否当前为动漫暖色主题
+  static bool isAnime(BuildContext context) =>
+      Theme.of(context).extension<ThemeKindData>()?.anime ?? false;
 
-  static Color surfaceOf(BuildContext context) =>
-      isDark(context) ? surface : const Color(0xFFF7FBFF);
+  static Color backgroundOf(BuildContext context) {
+    if (isAnime(context)) return animeBackground;
+    return isDark(context) ? background : lightBackground;
+  }
 
-  static Color surfaceLightOf(BuildContext context) =>
-      isDark(context) ? surfaceLight : const Color(0xFFEDF3FA);
+  static Color surfaceOf(BuildContext context) {
+    if (isAnime(context)) return animeSurface;
+    return isDark(context) ? surface : lightSurface;
+  }
 
-  static Color textPrimaryOf(BuildContext context) =>
-      isDark(context) ? textPrimary : const Color(0xFF0E1B2E);
+  static Color surfaceLightOf(BuildContext context) {
+    if (isAnime(context)) return animeSurfaceLight;
+    return isDark(context) ? surfaceLight : lightSurfaceLight;
+  }
 
-  static Color textSecondaryOf(BuildContext context) =>
-      isDark(context) ? textSecondary : const Color(0xFF4A5A72);
+  static Color textPrimaryOf(BuildContext context) {
+    if (isAnime(context)) return animeTextPrimary;
+    return isDark(context) ? textPrimary : lightTextPrimary;
+  }
 
-  static Color borderOf(BuildContext context) =>
-      isDark(context) ? border : const Color(0xFFD6E2F0);
+  static Color textSecondaryOf(BuildContext context) {
+    if (isAnime(context)) return animeTextSecondary;
+    return isDark(context) ? textSecondary : lightTextSecondary;
+  }
+
+  static Color borderOf(BuildContext context) {
+    if (isAnime(context)) return animeBorder;
+    return isDark(context) ? border : lightBorder;
+  }
 
   /// 主色霓虹发光阴影
   static List<BoxShadow> neonShadow({double blur = 12, Color? color}) => [

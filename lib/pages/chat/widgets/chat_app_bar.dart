@@ -12,12 +12,14 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onNewConversation,
     required this.onRegenerate,
     required this.onClearConversation,
+    required this.onApplyTemplate,
   });
 
   final String title;
   final VoidCallback onNewConversation;
   final VoidCallback onRegenerate;
   final VoidCallback onClearConversation;
+  final VoidCallback onApplyTemplate;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -86,6 +88,8 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
             switch (value) {
               case 'switch':
                 await _switchModel(context);
+              case 'template':
+                onApplyTemplate();
               case 'regenerate':
                 onRegenerate();
               case 'clear':
@@ -98,6 +102,13 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
               child: _MenuItem(
                 icon: Icons.swap_horiz_rounded,
                 label: '切换模型',
+              ),
+            ),
+            PopupMenuItem(
+              value: 'template',
+              child: _MenuItem(
+                icon: Icons.auto_awesome_rounded,
+                label: 'Prompt 模板',
               ),
             ),
             PopupMenuItem(

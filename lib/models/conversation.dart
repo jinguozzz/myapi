@@ -6,6 +6,7 @@ class Conversation {
     required this.id,
     required this.title,
     this.modelConfigId,
+    this.tag,
     required this.createdAt,
     required this.updatedAt,
     this.messages = const [],
@@ -20,6 +21,9 @@ class Conversation {
   /// 使用的模型配置 ID
   final String? modelConfigId;
 
+  /// 标签（工作 / 学习 / 闲聊 等）
+  final String? tag;
+
   /// 创建时间
   final DateTime createdAt;
 
@@ -32,6 +36,7 @@ class Conversation {
   Conversation copyWith({
     String? title,
     String? modelConfigId,
+    String? tag,
     DateTime? createdAt,
     DateTime? updatedAt,
     List<Message>? messages,
@@ -40,6 +45,7 @@ class Conversation {
         id: id,
         title: title ?? this.title,
         modelConfigId: modelConfigId ?? this.modelConfigId,
+        tag: tag ?? this.tag,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
         messages: messages ?? this.messages,
@@ -51,6 +57,7 @@ class ConversationSummary {
   const ConversationSummary({
     required this.id,
     required this.title,
+    this.tag,
     required this.updatedAt,
     required this.messageCount,
     this.lastMessage,
@@ -58,6 +65,7 @@ class ConversationSummary {
 
   final String id;
   final String title;
+  final String? tag;
   final DateTime updatedAt;
   final int messageCount;
 

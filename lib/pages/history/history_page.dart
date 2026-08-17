@@ -21,6 +21,7 @@ class _HistoryPageState extends State<HistoryPage> {
   final TextEditingController _searchCtrl = TextEditingController();
   List<ConversationSummary> _items = [];
   int _loadToken = 0;
+  String? _tagFilter;
 
   @override
   void initState() {
@@ -46,8 +47,73 @@ class _HistoryPageState extends State<HistoryPage> {
     _load();
   }
 
+  /// 设置标签
+  Future<void> _setTag(ConversationSummary item, String? tag) async {
+    await AppState.instance.conversationRepository.updateTag(item.id, tag);
+    await _load();
+  }
+
   Future<void> _open(ConversationSummary item) async {
     await AppState.instance.openConversation(item.id);
+  }
+
+  void _showTagPicker(ConversationSummary item) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: SciColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                '设置标签',
+                style: TextStyle(
+                  color: SciColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+            for (final tag in const ['工作', '学习', '闲聊'])
+              ListTile(
+                leading: Icon(Icons.label_outline_rounded,
+                    color: SciColors.secondary, size: 20),
+                title: Text(
+                  tag,
+                  style: const TextStyle(
+                      color: SciColors.textPrimary, fontSize: 14),
+                ),
+                trailing: item.tag == tag
+                    ? Icon(Icons.check_circle_rounded,
+                        color: SciColors.primary, size: 20)
+                    : null,
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _setTag(item, tag);
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.label_off_outlined,
+                  color: SciColors.textSecondary, size: 20),
+              title: const Text('清除标签',
+                  style: TextStyle(
+                      color: SciColors.textSecondary, fontSize: 14)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _setTag(item, null);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showActions(ConversationSummary item) {
@@ -91,6 +157,16 @@ class _HistoryPageState extends State<HistoryPage> {
               onTap: () {
                 Navigator.of(ctx).pop();
                 _rename(item);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.label_outline_rounded,
+                  color: SciColors.primary, size: 20),
+              title: const Text('设置标签',
+                  style: TextStyle(color: SciColors.textPrimary, fontSize: 14)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _showTagPicker(item);
               },
             ),
             ListTile(
@@ -274,47 +350,93 @@ class _HistoryPageState extends State<HistoryPage> {
               ),
             ),
             const SizedBox(height: 8),
-            Expanded(
-              child: _items.isEmpty
-                  ? _emptyState(context)
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-                      itemCount: _items.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, i) {
-                        final item = _items[i];
-                        return Dismissible(
-                          key: ValueKey(item.id),
-                          direction: DismissDirection.endToStart,
-                          background: Container(
-                            alignment: Alignment.centerRight,
-                            padding: const EdgeInsets.only(right: 20),
-                            decoration: BoxDecoration(
-                              color: SciColors.danger.withValues(alpha: 0.85),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: const Icon(
-                              Icons.delete_outline_rounded,
-                              color: Colors.white,
-                            ),
-                          ),
-                          onDismissed: (_) {
-                            _items.removeAt(i);
-                            AppState.instance.deleteConversation(item.id);
-                            _load();
-                          },
-                          child: HistoryListItem(
-                            title: item.title,
-                            subtitle: item.lastMessage ?? '暂无消息',
-                            time: _formatTime(item.updatedAt),
-                            count: item.messageCount,
-                            onTap: () => _open(item),
-                            onLongPress: () => _showActions(item),
-                            onMenu: () => _showActions(item),
-                          ),
-                        );
-                      },
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  for (final f in const <(String?, String)>[
+                    (null, '全部'),
+                    ('', '未分类'),
+                    ('工作', '工作'),
+                    ('学习', '学习'),
+                    ('闲聊', '闲聊'),
+                  ])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(f.$2),
+                        selected: _tagFilter == f.$1,
+                        selectedColor:
+                            SciColors.primary.withValues(alpha: 0.18),
+                        labelStyle: TextStyle(
+                          color: _tagFilter == f.$1
+                              ? SciColors.primary
+                              : SciColors.textSecondaryOf(context),
+                          fontSize: 12,
+                        ),
+                        side: BorderSide(color: SciColors.borderOf(context)),
+                        onSelected: (_) =>
+                            setState(() => _tagFilter = f.$1),
+                      ),
                     ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: Builder(builder: (context) {
+                final displayItems = _items.where((e) {
+                  if (_tagFilter == null) return true;
+                  if (_tagFilter == '') {
+                    return e.tag == null || e.tag!.isEmpty;
+                  }
+                  return e.tag == _tagFilter;
+                }).toList();
+                if (displayItems.isEmpty) {
+                  return _emptyState(context);
+                }
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                  itemCount: displayItems.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, i) {
+                    final item = displayItems[i];
+                    return Dismissible(
+                      key: ValueKey(item.id),
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 20),
+                        decoration: BoxDecoration(
+                          color: SciColors.danger.withValues(alpha: 0.85),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.delete_outline_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
+                      onDismissed: (_) {
+                        displayItems.removeAt(i);
+                        _items.removeWhere((e) => e.id == item.id);
+                        AppState.instance.deleteConversation(item.id);
+                        _load();
+                      },
+                      child: HistoryListItem(
+                        title: item.title,
+                        subtitle: item.lastMessage ?? '暂无消息',
+                        time: _formatTime(item.updatedAt),
+                        count: item.messageCount,
+                        tag: item.tag,
+                        onTap: () => _open(item),
+                        onLongPress: () => _showActions(item),
+                        onMenu: () => _showActions(item),
+                      ),
+                    );
+                  },
+                );
+              }),
             ),
           ],
         ),

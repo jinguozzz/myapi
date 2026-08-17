@@ -10,6 +10,7 @@ class HistoryListItem extends StatelessWidget {
     required this.subtitle,
     required this.time,
     required this.count,
+    this.tag,
     required this.onTap,
     required this.onLongPress,
     required this.onMenu,
@@ -19,6 +20,7 @@ class HistoryListItem extends StatelessWidget {
   final String subtitle;
   final String time;
   final int count;
+  final String? tag;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback onMenu;
@@ -79,6 +81,30 @@ class HistoryListItem extends StatelessWidget {
                     const SizedBox(height: 10),
                     Row(
                       children: [
+                        if (tag != null) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: SciColors.secondary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: SciColors.secondary.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Text(
+                              tag!,
+                              style: const TextStyle(
+                                color: SciColors.secondary,
+                                fontSize: 10,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 6,

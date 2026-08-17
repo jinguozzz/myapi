@@ -12,7 +12,7 @@ import '../../models/message.dart';
 /// conversations 与 messages 两张表，消息外键级联删除。
 class ConversationRepository {
   static const _dbName = 'myai_conversations.db';
-  static const _dbVersion = 2;
+  static const _dbVersion = 3;
 
   Database? _db;
 
@@ -34,6 +34,7 @@ class ConversationRepository {
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         model_config_id TEXT,
+        tag TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
@@ -54,6 +55,9 @@ class ConversationRepository {
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('ALTER TABLE messages ADD COLUMN attachments TEXT');
+    }
+    if (oldVersion < 3) {
+      await db.execute('ALTER TABLE conversations ADD COLUMN tag TEXT');
     }
   }
 
@@ -82,6 +86,7 @@ class ConversationRepository {
           ConversationSummary(
             id: r['id'] as String,
             title: r['title'] as String,
+            tag: r['tag'] as String?,
             updatedAt:
                 DateTime.fromMillisecondsSinceEpoch(r['updated_at'] as int),
             messageCount: (r['message_count'] as int?) ?? 0,
@@ -115,6 +120,7 @@ class ConversationRepository {
         id: id,
         title: r['title'] as String,
         modelConfigId: r['model_config_id'] as String?,
+        tag: r['tag'] as String?,
         createdAt:
             DateTime.fromMillisecondsSinceEpoch(r['created_at'] as int),
         updatedAt:
@@ -155,6 +161,19 @@ class ConversationRepository {
       await db.update(
         'conversations',
         {'title': title},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    } catch (_) {}
+  }
+
+  /// 设置对话标签
+  Future<void> updateTag(String id, String? tag) async {
+    try {
+      final db = await _database;
+      await db.update(
+        'conversations',
+        {'tag': tag},
         where: 'id = ?',
         whereArgs: [id],
       );

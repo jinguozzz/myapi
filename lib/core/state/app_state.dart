@@ -8,6 +8,7 @@ import '../../services/storage/attachment_storage.dart';
 import '../../services/storage/conversation_repository.dart';
 import '../../services/storage/model_config_repository.dart';
 import '../../services/storage/secure_storage_service.dart';
+import '../theme/app_theme.dart';
 
 /// 轻量全局状态（主题、字体缩放、模型、对话）。
 /// 不引入第三方状态管理，保持轻量；后续可平滑迁移至 Riverpod。
@@ -18,7 +19,8 @@ class AppState {
   static final AppState instance = AppState._();
 
   /// 主题模式
-  final ValueNotifier<ThemeMode> themeMode = ValueNotifier(ThemeMode.dark);
+  final ValueNotifier<AppThemeMode> themeMode =
+      ValueNotifier(AppThemeMode.dark);
 
   /// 霓虹主题色（自定义主色）
   final ValueNotifier<Color> accentColor =
