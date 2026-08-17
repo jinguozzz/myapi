@@ -17,6 +17,8 @@ class MessageInputBar extends StatefulWidget {
     required this.onAttach,
     required this.onToggleWebSearch,
     required this.webSearchEnabled,
+    required this.onToggleTranslate,
+    required this.translateMode,
     required this.isGenerating,
   });
 
@@ -34,13 +36,19 @@ class MessageInputBar extends StatefulWidget {
 
   /// 是否已开启联网搜索
   final bool webSearchEnabled;
+
+  /// 切换翻译模式
+  final VoidCallback onToggleTranslate;
+
+  /// 是否已开启翻译模式
+  final bool translateMode;
   final bool isGenerating;
 
   @override
-  State<MessageInputBar> createState() => _MessageInputBarState();
+  State<MessageInputBar> createState() => MessageInputBarState();
 }
 
-class _MessageInputBarState extends State<MessageInputBar>
+class MessageInputBarState extends State<MessageInputBar>
     with SingleTickerProviderStateMixin {
   final TextEditingController _controller = TextEditingController();
   final SpeechToText _speech = SpeechToText();
@@ -70,6 +78,13 @@ class _MessageInputBarState extends State<MessageInputBar>
     _pulseController.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  /// 外部写入输入框文字（OCR 提取结果等）
+  void setText(String text) {
+    _controller.text = text;
+    _controller.selection =
+        TextSelection.collapsed(offset: _controller.text.length);
   }
 
   void _submit() {
@@ -224,6 +239,13 @@ class _MessageInputBarState extends State<MessageInputBar>
               tooltip: widget.webSearchEnabled ? '联网搜索：开' : '联网搜索：关',
               active: widget.webSearchEnabled,
               onTap: widget.onToggleWebSearch,
+            ),
+            const SizedBox(width: 4),
+            _iconButton(
+              Icons.translate_rounded,
+              tooltip: widget.translateMode ? '翻译模式：开' : '翻译模式：关',
+              active: widget.translateMode,
+              onTap: widget.onToggleTranslate,
             ),
             const SizedBox(width: 4),
             Expanded(

@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
@@ -19,6 +20,7 @@ import '../../services/network/chat_service.dart';
 import '../../services/network/weather_service.dart';
 import '../../services/network/web_search_service.dart';
 import '../../services/storage/attachment_storage.dart';
+import '../../services/tools/smart_tool.dart';
 import 'widgets/chat_app_bar.dart';
 import 'widgets/message_bubble.dart';
 import 'widgets/message_input_bar.dart';
@@ -37,9 +39,12 @@ class _ChatPageState extends State<ChatPage> {
   final ChatService _chatService = ChatService();
   final WebSearchService _webSearch = WebSearchService();
   final WeatherService _weather = WeatherService();
+  final SmartTool _smartTool = SmartTool();
   final ImagePicker _imagePicker = ImagePicker();
   final FlutterTts _tts = FlutterTts();
   final Uuid _uuid = const Uuid();
+  final GlobalKey<MessageInputBarState> _inputKey =
+      GlobalKey<MessageInputBarState>();
   final List<Message> _messages = [];
   final List<Attachment> _pendingAttachments = [];
 
@@ -48,6 +53,9 @@ class _ChatPageState extends State<ChatPage> {
 
   /// 是否开启联网搜索
   bool _webSearchEnabled = false;
+
+  /// 是否开启翻译模式
+  bool _translateMode = false;
 
   bool _showWelcome = true;
   bool _isGenerating = false;
@@ -145,25 +153,54 @@ class _ChatPageState extends State<ChatPage> {
     _persistMessage(userMsg);
     _scrollToBottom();
 
-    // 联网搜索：抓取结果作为上下文注入
+    // 1) 本地工具（计算 / 单位换算）
     List<Message> requestMessages = _buildRequestMessages();
-    if (_webSearchEnabled) {
-      _toast('正在联网搜索…');
-      final context = await _fetchSearchContext(trimmed);
-      if (context != null) {
-        requestMessages = [
-          Message(
-            id: _uuid.v4(),
-            role: 'system',
-            content: context,
-            timestamp: DateTime.now(),
-          ),
-          ...requestMessages,
-        ];
-        _toast('已获取联网结果，正在回答');
-      } else {
-        _toast('联网搜索未获取到结果，已直接提问');
+    final toolResult = _smartTool.run(trimmed);
+    if (toolResult != null) {
+      requestMessages = [
+        Message(
+          id: _uuid.v4(),
+          role: 'system',
+          content: '本地工具结果：$toolResult\n请直接、简洁地告诉用户这个结果。',
+          timestamp: DateTime.now(),
+        ),
+        ...requestMessages,
+      ];
+    } else {
+      // 2) 联网搜索 + 实时天气
+      if (_webSearchEnabled) {
+        _toast('正在联网搜索…');
+        final context = await _fetchSearchContext(trimmed);
+        if (context != null) {
+          requestMessages = [
+            Message(
+              id: _uuid.v4(),
+              role: 'system',
+              content: context,
+              timestamp: DateTime.now(),
+            ),
+            ...requestMessages,
+          ];
+          _toast('已获取联网结果，正在回答');
+        } else {
+          _toast('联网搜索未获取到结果，已直接提问');
+        }
       }
+    }
+
+    // 3) 翻译模式
+    if (_translateMode) {
+      requestMessages = [
+        Message(
+          id: _uuid.v4(),
+          role: 'system',
+          content: '你是翻译助手：把用户最新一条消息翻译为另一种语言'
+              '（中文翻译成英文；英文或其他语言翻译成中文）。'
+              '只输出译文，不要输出多余内容。',
+          timestamp: DateTime.now(),
+        ),
+        ...requestMessages,
+      ];
     }
     _startStreaming(model, messages: requestMessages);
   }
@@ -267,6 +304,15 @@ class _ChatPageState extends State<ChatPage> {
                   style: TextStyle(color: SciColors.textSecondary, fontSize: 11)),
               onTap: () => Navigator.of(ctx).pop(_AttachAction.file),
             ),
+            ListTile(
+              leading: Icon(Icons.document_scanner_outlined,
+                  color: SciColors.primary, size: 20),
+              title: const Text('OCR 识别文字',
+                  style: TextStyle(color: SciColors.textPrimary, fontSize: 14)),
+              subtitle: const Text('识别图片/截图中的文字并填入输入框',
+                  style: TextStyle(color: SciColors.textSecondary, fontSize: 11)),
+              onTap: () => Navigator.of(ctx).pop(_AttachAction.ocr),
+            ),
             const SizedBox(height: 8),
           ],
         ),
@@ -280,7 +326,81 @@ class _ChatPageState extends State<ChatPage> {
         await _pickFiles(FileType.image);
       case _AttachAction.file:
         await _pickFiles(FileType.any);
+      case _AttachAction.ocr:
+        await _ocrImage();
     }
+  }
+
+  /// OCR 识别图片文字（离线，ML Kit 中文模型）
+  Future<void> _ocrImage() async {
+    try {
+      final files = await FilePicker.pickFiles(type: FileType.image);
+      if (files.isEmpty) return;
+      final path = files.first.path;
+      if (path == null) return;
+      _toast('正在识别文字…');
+      final recognizer =
+          TextRecognizer(script: TextRecognitionScript.chinese);
+      try {
+        final result = await recognizer
+            .processImage(InputImage.fromFilePath(path));
+        final text = result.text.trim();
+        if (text.isEmpty) {
+          _toast('未识别到文字');
+          return;
+        }
+        _inputKey.currentState?.setText(text);
+        _toast('已提取 ${text.length} 字，可编辑后提问');
+      } finally {
+        recognizer.close();
+      }
+    } catch (e) {
+      if (mounted) _toast('OCR 识别失败：$e');
+    }
+  }
+
+  /// 快捷指令：一键发送
+  Future<void> _showQuickCommands() async {
+    final command = await showModalBottomSheet<QuickCommand>(
+      context: context,
+      backgroundColor: SciColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                '快捷指令',
+                style: TextStyle(
+                  color: SciColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+            for (final c in quickCommands)
+              ListTile(
+                leading: Icon(Icons.bolt_rounded,
+                    color: SciColors.primary, size: 18),
+                title: Text(
+                  c.label,
+                  style: const TextStyle(
+                      color: SciColors.textPrimary, fontSize: 14),
+                ),
+                onTap: () => Navigator.of(ctx).pop(c),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (command == null || !mounted) return;
+    await _handleSend(command.content);
   }
 
   /// 拍照上传（调用系统相机）
@@ -888,6 +1008,7 @@ class _ChatPageState extends State<ChatPage> {
         onRegenerate: _regenerate,
         onClearConversation: _clearConversation,
         onApplyTemplate: _applyTemplate,
+        onQuickCommand: _showQuickCommands,
       ),
       body: Column(
         children: [
@@ -964,14 +1085,18 @@ class _ChatPageState extends State<ChatPage> {
               ),
             ),
           MessageInputBar(
+            key: _inputKey,
             isGenerating: _isGenerating,
             webSearchEnabled: _webSearchEnabled,
+            translateMode: _translateMode,
             onSend: _handleSend,
             onStop: _stopGenerating,
             onCopy: _copyLastAiReply,
             onAttach: _onAttach,
             onToggleWebSearch: () =>
                 setState(() => _webSearchEnabled = !_webSearchEnabled),
+            onToggleTranslate: () =>
+                setState(() => _translateMode = !_translateMode),
           ),
         ],
       ),
@@ -980,7 +1105,7 @@ class _ChatPageState extends State<ChatPage> {
 }
 
 /// 附件操作类型
-enum _AttachAction { camera, image, file }
+enum _AttachAction { camera, image, file, ocr }
 
 /// 待发送附件芯片
 class _PendingChip extends StatelessWidget {

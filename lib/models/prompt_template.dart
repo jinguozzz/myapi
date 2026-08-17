@@ -11,6 +11,25 @@ class PromptTemplate {
   final String prompt;
 }
 
+/// 快捷指令（常用问题一键发送）
+class QuickCommand {
+  const QuickCommand({required this.label, required this.content});
+
+  final String label;
+  final String content;
+}
+
+/// 内置快捷指令
+const quickCommands = <QuickCommand>[
+  QuickCommand(label: '介绍你自己', content: '用几句话介绍一下你是谁、能做什么。'),
+  QuickCommand(label: '讲个笑话', content: '给我讲一个轻松的笑话。'),
+  QuickCommand(label: '写一首诗', content: '即兴写一首简短的小诗。'),
+  QuickCommand(label: '今日热点', content: '说说最近有哪些重要的时事热点。'),
+  QuickCommand(label: '翻译一段话', content: '翻译：Hello, nice to meet you!'),
+  QuickCommand(label: 'Python 爬虫示例', content: '用 Python 写一个简单的网页抓取示例。'),
+  QuickCommand(label: '总结重点', content: '请把下面内容总结成三条要点：'),
+];
+
 /// 内置模板库
 const promptTemplates = <PromptTemplate>[
   // 角色扮演

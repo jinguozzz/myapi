@@ -13,6 +13,7 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onRegenerate,
     required this.onClearConversation,
     required this.onApplyTemplate,
+    required this.onQuickCommand,
   });
 
   final String title;
@@ -20,6 +21,7 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onRegenerate;
   final VoidCallback onClearConversation;
   final VoidCallback onApplyTemplate;
+  final VoidCallback onQuickCommand;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -90,6 +92,8 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                 await _switchModel(context);
               case 'template':
                 onApplyTemplate();
+              case 'quick':
+                onQuickCommand();
               case 'regenerate':
                 onRegenerate();
               case 'clear':
@@ -109,6 +113,13 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
               child: _MenuItem(
                 icon: Icons.auto_awesome_rounded,
                 label: 'Prompt 模板',
+              ),
+            ),
+            PopupMenuItem(
+              value: 'quick',
+              child: _MenuItem(
+                icon: Icons.bolt_rounded,
+                label: '快捷指令',
               ),
             ),
             PopupMenuItem(

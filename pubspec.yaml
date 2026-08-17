@@ -51,6 +51,7 @@ dependencies:
   markdown: ^7.3.1
   permission_handler: ^13.0.1
   flutter_tts: ^4.2.5
+  google_mlkit_text_recognition: ^0.16.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
